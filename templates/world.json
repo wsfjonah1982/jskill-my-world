@@ -1,0 +1,39 @@
+{
+  "name": "{{NAME}}",
+  "tagline": "One or two sentences: who the series is about and where it happens.",
+  "chips": ["Art style in 3 words", "16:9 · 720p", "Language(s)", "Where", "Short footage 10–20s · long takes 1–2 min"],
+  "format": {
+    "ratio": "16:9",
+    "keyframe_size": "2560x1440",
+    "resolution": "720p",
+    "short_min": 10,
+    "short_max": 20,
+    "short_options": [10, 15, 20],
+    "segment_seconds": 20,
+    "audio": true
+  },
+  "characters": [
+    {
+      "key": "hero",
+      "name": "Hero Name",
+      "label": "the girl",
+      "kind": "girl",
+      "tag": "<Hero>",
+      "pronoun": "She",
+      "sheet": "_asset/hero.png",
+      "colour": "#f4a6c1",
+      "height_cm": 160,
+      "height_note": "tall standing",
+      "facts": ["Age, background", "Personality in a few words", "Signature outfit", "How they speak"],
+      "voice_src": "designed from the text description"
+    }
+  ],
+  "groups": [],
+  "world_cards": [
+    {"title": "Where", "text": "The place in one or two sentences."},
+    {"title": "Look and rules", "text": "Palette, light and the rules every picture keeps."}
+  ],
+  "voices_lead": "The characters talking together.",
+  "no_props_rule": "Props: only what the scene describes; no other recurring props.",
+  "speech_credential": ""
+}

@@ -1,0 +1,10 @@
+# Secrets
+credential*.json
+
+# Runtime folders — raw material from the user (_input/) and the generated worlds (_world/)
+_input/
+_world/
+
+# Python
+__pycache__/
+*.pyc
