@@ -1,4 +1,4 @@
-"""Build project_overview.html, the "My World" page: characters (sheets, facts, voices), group pictures, the world,
+"""Build world.html, the "My World" page: characters (sheets, facts, voices), group pictures, the world,
 locations, props, how stories are made, the project documents and, at the bottom, the Tasks list (date and topic,
 newest first) linking to each task's pages. Every linked page gets a nav bar back here (pagenav.py).
 
@@ -162,7 +162,7 @@ class Overview:
               [("workflow", "Workflow"), ("docs", "Docs"), ("tasks", "Tasks")]
 
         page = f"""<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>{e(w.name)}</title>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>My World</title>
 <style>
 :root{{--bg:#f5f8f7;--fg:#1c2928;--mut:#5b6e6b;--card:#fff;--line:#dce6e4;--brand:#2f7d73;--warn:#b56b16;--chip:#eef4f3}}
 @media (prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#121818;--fg:#e5eeec;--mut:#9cb0ad;--card:#1b2423;--line:#2c3a39;--brand:#6cc3b6;--warn:#e7a456;--chip:#22302f}}}}
@@ -195,7 +195,7 @@ ul{{margin:0;padding-left:18px}} li{{margin:2px 0}} audio{{width:100%;margin:4px
 .tasks li{{display:flex;gap:16px;padding:10px 16px;margin:0;border-top:1px solid var(--line)}} .tasks li:first-child{{border-top:0}}
 .tasks time{{color:var(--mut);font-variant-numeric:tabular-nums;flex:none}} .tasks small{{color:var(--mut)}} footer{{margin-top:48px;color:var(--mut);font-size:13px}}
 </style></head><body><main>
-<header><h1>{e(w.name)}</h1><p>{e(cfg.get('tagline', ''))}</p><div class=facts>{chips}</div></header>
+<header><h1>My World</h1><p>{e(cfg.get('tagline', ''))}</p><div class=facts>{chips}</div></header>
 <nav class=sec>{''.join(f'<a href=#{a}>{e(b)}</a>' for a, b in nav)}</nav>
 
 <section id=characters><h2>Characters</h2><p class=lead>Canonical descriptions live in <a href=Identities.md>Identities.md</a>.

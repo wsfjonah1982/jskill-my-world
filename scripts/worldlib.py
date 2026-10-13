@@ -5,15 +5,15 @@ A world is a folder with a `world.json` manifest and two canon files, `Identitie
 code block — are pasted word for word into every image and video prompt, so every render of the world stays
 consistent. Change a character or a place there, never in a single prompt.
 
-Generation goes through the `video-workflow` skill (Seedream images, Seedance videos, BytePlus ARK API). Its scripts
-read settings only from its own config.json, so this module patches that file for the length of one call, under a
-lock, and restores it byte for byte afterwards.
+Generation runs through this skill's own scripts/ark/ (Seedream images, Seedance videos, BytePlus ARK API), with
+config.json for the endpoint and defaults; the settings of one call (model, size, ratio…) are passed to those scripts
+in the MY_WORLD_ARK_OVERRIDES env var. Keys live in the skill's credential.json: `model_ark_key` (images, videos) and `speech_model_api_key` (voices).
 
 CLI:  python worldlib.py canon [key] [--world DIR]   list every canon block, or print one
       python worldlib.py check [group ...] [--world DIR]   python | image | video | ffmpeg | voice | world
       python worldlib.py info [--world DIR]   the world's characters, locations and format
-The world folder is --world, else the env var WORLD_DIR, else the nearest folder upwards from the current
-directory that holds a world.json.
+The world folder is --world, else the env var WORLD_DIR, else the nearest folder upwards from the current directory
+that holds a world.json, else the skill's _world/ (one world only: a new cast or place is merged into it).
 """
 import importlib.util
 import json
@@ -22,20 +22,21 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-VW = Path(os.environ.get("VIDEO_WORKFLOW_DIR", SKILL_DIR.parent / "video-workflow"))
+ARK = SKILL_DIR / "scripts" / "ark"  # Seedream / Seedance scripts (copied from video-workflow; no other skill needed)
+CONFIG = SKILL_DIR / "config.json"  # Ark endpoint and default settings
+CREDENTIAL = SKILL_DIR / "credential.json"  # model_ark_key (images, videos) + speech_model_api_key (voices)
+OVERRIDES_ENV = "MY_WORLD_ARK_OVERRIDES"
+WORLD_HOME = SKILL_DIR / "_world"  # the one world of this skill (git-ignored); raw user material is in _input/
+INPUT_DIR = SKILL_DIR / "_input"
 GROUPS = ("python", "image", "video", "ffmpeg", "voice", "world")
 CANON_FILES = ("Identities.md", "Setting.md")
 REQUIRED_BLOCKS = ("style", "characters", "video-defs", "video-rules", "audio", "world")
 _BLOCK = re.compile(r"<!--\s*prompt:([\w:-]+)\s*-->\s*```[^\n]*\n(.*?)```", re.S)
-# Same lock name as brand-ads-footage, so tools of both never patch the video-workflow config at once.
-LOCK_NAME = "config.json.brand-ads-footage.lock"
-STALE_LOCK_S = 2 * 60 * 60
 
 DEFAULT_FORMAT = {"ratio": "16:9", "keyframe_size": "2560x1440", "resolution": "720p", "short_min": 10,
                   "short_max": 20, "short_options": [10, 15, 20], "segment_seconds": 20, "audio": True}
@@ -50,16 +51,24 @@ NEG_VIDEO = ("no watermark, no logo, no brand text, no subtitles, no captions, n
 
 
 # ---------------------------------------------------------------- the world
+def resolve_world(arg):
+    """`--world` value: a folder path."""
+    return Path(arg).resolve()
+
+
 def find_world(start=None):
-    """The world folder: WORLD_DIR, else the nearest folder upwards from `start` (or the cwd) with a world.json."""
+    """The world folder: WORLD_DIR, else the nearest folder upwards from `start` (or the cwd) with a world.json,
+    else the skill's _world/ (there is only ever one world)."""
     if os.environ.get("WORLD_DIR") and start is None:
-        return Path(os.environ["WORLD_DIR"]).resolve()
+        return resolve_world(os.environ["WORLD_DIR"])
     p = Path(start or Path.cwd()).resolve()
     for d in [p, *p.parents]:
         if (d / "world.json").is_file():
             return d
-    sys.exit(f"DEPENDENCY ERROR [WORLD]: no world.json in {p} or any folder above it. "
-             "Pass --world DIR, set WORLD_DIR, or create a world with my-world's new_world.py.")
+    if (WORLD_HOME / "world.json").is_file():
+        return WORLD_HOME
+    sys.exit(f"DEPENDENCY ERROR [WORLD]: no world.json in {p} or any folder above it, nor in {WORLD_HOME}. "
+             "Create the world with my-world's new_world.py, or pass --world DIR / set WORLD_DIR.")
 
 
 def pop_world_arg(argv):
@@ -72,7 +81,7 @@ def pop_world_arg(argv):
 
 class World:
     def __init__(self, root=None):
-        self.root = Path(root).resolve() if root else find_world()
+        self.root = resolve_world(root) if root else find_world()
         mf = self.root / "world.json"
         if not mf.is_file():
             sys.exit(f"DEPENDENCY ERROR [WORLD]: {mf} is missing.")
@@ -96,7 +105,7 @@ class World:
 
     @property
     def overview(self):
-        return self.root / "project_overview.html"
+        return self.root / "world.html"
 
     def char_name(self, key):
         return self.chars[key]["name"]
@@ -179,31 +188,33 @@ def _python():
     return errs
 
 
-def _video_workflow(need_video):
-    if not (VW / "SKILL.md").is_file():
-        return [("SKILL-VIDEO-WORKFLOW", f"Skill 'video-workflow' not found at {VW}. Install it there or set VIDEO_WORKFLOW_DIR.")]
-    errs = []
-    scripts = ["ark_service.py", "generate_image_from_reference.py", "generate_character_sheet.py"]
+def _read_json(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def ark_api_key():
+    """BytePlus ARK API key: env var `model_ark_key`, else `model_ark_key` in the skill's credential.json."""
+    return os.environ.get("model_ark_key") or (_read_json(CREDENTIAL) or {}).get("model_ark_key")
+
+
+def _ark(need_video):
+    scripts = ["ark_service.py", "generate_image_from_reference.py", "generate_character_sheet.py",
+               "three_angle_character_sheet.txt"]
     if need_video:
         scripts += ["generate_video_from_reference.py", "resume_video_task.py"]
-    for s in scripts:
-        if not (VW / "scripts" / s).is_file():
-            errs.append(("SKILL-VIDEO-WORKFLOW", f"Skill 'video-workflow' is incomplete: scripts/{s} is missing."))
-    try:
-        cfg = json.loads((VW / "config.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        return errs + [("SKILL-VIDEO-WORKFLOW", f"Skill 'video-workflow' config.json is missing or invalid ({e}).")]
+    errs = [("ARK-SCRIPTS", f"my-world is incomplete: scripts/ark/{s} is missing.") for s in scripts
+            if not (ARK / s).is_file()]
+    cfg = _read_json(CONFIG)
+    if cfg is None:
+        return errs + [("CONFIG", f"{CONFIG} is missing or invalid.")]
     if not cfg.get("maas_api_endpoint"):
-        errs.append(("API-ENDPOINT", "video-workflow config.json has no 'maas_api_endpoint' (BytePlus ARK endpoint)."))
-    if not os.environ.get("model_ark_key"):
-        cred = VW / "credential.json"
-        try:
-            ok = bool(json.loads(cred.read_text(encoding="utf-8")).get("model_ark_key"))
-        except (OSError, ValueError):
-            ok = False
-        if not ok:
-            errs.append(("API-KEY", "BytePlus ARK API key not found: set the env var 'model_ark_key' "
-                                    f"or put 'model_ark_key' in {cred}."))
+        errs.append(("API-ENDPOINT", f"{CONFIG} has no 'maas_api_endpoint' (BytePlus ARK endpoint)."))
+    if not ark_api_key():
+        errs.append(("API-KEY", "BytePlus ARK API key not found: set the env var 'model_ark_key' or put "
+                                f"'model_ark_key' in {CREDENTIAL} (template: credential_tmp.json)."))
     return errs
 
 
@@ -213,15 +224,15 @@ def speech_credential(world=None):
 
 
 def speech_api_key(world=None):
-    """BytePlus speech (Seed Audio) API key: env var first, then the credential file. None if missing."""
+    """BytePlus speech (Seed Audio) API key: env var `speech_model_api_key`, then the world's speech_credential file,
+    then `speech_model_api_key` in the skill's credential.json. None if missing. (The ARK key is rejected by the
+    speech API with 401 Invalid X-Api-Key, so it is not a fallback.)"""
     if os.environ.get("speech_model_api_key"):
         return os.environ["speech_model_api_key"]
     cred = speech_credential(world)
-    try:
-        c = json.loads(cred.read_text(encoding="utf-8")) if cred else {}
-    except (OSError, ValueError):
-        return None
-    return c.get("speech_model_api_key") or c.get("api_key")
+    c = (_read_json(cred) or {}) if cred else {}
+    key = c.get("speech_model_api_key") or c.get("api_key")
+    return key or (_read_json(CREDENTIAL) or {}).get("speech_model_api_key")
 
 
 def _world(world):
@@ -250,13 +261,13 @@ def check(groups=GROUPS, world=None):
     if "python" in groups:
         errs += _python()
     if "image" in groups or "video" in groups:
-        errs += _video_workflow(need_video="video" in groups)
+        errs += _ark(need_video="video" in groups)
     if "ffmpeg" in groups:
         errs += [("FFMPEG", f"'{t}' is not on PATH. Install FFmpeg and add its bin folder to PATH.")
                  for t in ("ffmpeg", "ffprobe") if shutil.which(t) is None]
     if "voice" in groups and not speech_api_key(world):
-        errs.append(("SPEECH-KEY", "BytePlus speech API key (Seed Audio) not found: set the env var 'speech_model_api_key', "
-                                   "or point world.json 'speech_credential' (or SPEECH_CREDENTIAL_FILE) at a JSON file with it."))
+        errs.append(("SPEECH-KEY", "BytePlus speech API key (Seed Audio) not found: put 'speech_model_api_key' in "
+                                   f"{CREDENTIAL} (next to model_ark_key), or set the env var 'speech_model_api_key'."))
     if "world" in groups:
         errs += _world(world)
     return list(dict.fromkeys(errs))
@@ -272,45 +283,25 @@ def require(groups=GROUPS, world=None):
         sys.exit(1)
 
 
-# ---------------------------------------------------------------- generation (video-workflow)
-def _acquire(lock, wait_s=3 * 60 * 60):
-    deadline = time.monotonic() + wait_s
-    while True:
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, str(os.getpid()).encode())
-            os.close(fd)
-            return
-        except FileExistsError:
-            if time.time() - lock.stat().st_mtime > STALE_LOCK_S:
-                lock.unlink(missing_ok=True)
-                continue
-            if time.monotonic() > deadline:
-                raise TimeoutError(f"Timed out waiting for lock {lock}")
-            print("video-workflow config is locked by another generation, waiting...", file=sys.stderr)
-            time.sleep(30)
+# ---------------------------------------------------------------- generation (scripts/ark)
+_OVERRIDES = []  # stack of per-call settings; a module global so worker threads of one batch share it
 
 
 @contextmanager
 def patched_config(overrides):
-    """Apply `overrides` to video-workflow's config.json for the length of the block, then restore it exactly."""
-    cfg = VW / "config.json"
-    lock = cfg.with_name(LOCK_NAME)
-    _acquire(lock)
-    original = cfg.read_bytes()
+    """Settings (model, size, ratio…) for every generation call inside the block, on top of config.json."""
+    _OVERRIDES.append(dict(overrides))
     try:
-        patched = json.loads(original.decode("utf-8"))
-        patched.update(overrides)
-        cfg.write_text(json.dumps(patched, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         yield
     finally:
-        cfg.write_bytes(original)
-        lock.unlink(missing_ok=True)
+        _OVERRIDES.pop()
 
 
 def _run(cmd):
-    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(VW),
-                       env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    if _OVERRIDES:
+        env[OVERRIDES_ENV] = json.dumps({k: v for o in _OVERRIDES for k, v in o.items()})
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(ARK), env=env)
     return r, ("done" if r.returncode == 0 else "failed: " + (r.stderr.strip().splitlines() or ["?"])[-1])
 
 
@@ -320,14 +311,14 @@ def image_settings(world, size=None):
 
 def gen_image(refs, prompt_file, out, log_dir):
     """One Seedream image from reference images + a prompt file. Call inside patched_config(image_settings(...))."""
-    _, status = _run([sys.executable, str(VW / "scripts/generate_image_from_reference.py"), "--img", *map(str, refs),
+    _, status = _run([sys.executable, str(ARK / "generate_image_from_reference.py"), "--img", *map(str, refs),
                       "--prompt", str(prompt_file), "--output", str(out), "--log-dir", str(log_dir)])
     return status
 
 
 def gen_sheet(idea_file, style, refs, out, log_dir):
     """A three-view character sheet (front / side / back) from a description file. Call inside patched_config."""
-    cmd = [sys.executable, str(VW / "scripts/generate_character_sheet.py"), "--idea", str(idea_file), "--style", style,
+    cmd = [sys.executable, str(ARK / "generate_character_sheet.py"), "--idea", str(idea_file), "--style", style,
            "--output", str(out), "--log-dir", str(log_dir)]
     if refs:
         cmd += ["--img", *map(str, refs)]
@@ -344,12 +335,12 @@ def gen_video(world, keyframe, prompt_file, duration, out, log_dir):
                  "video_resolution": world.fmt["resolution"], "video_duration_seconds": int(duration),
                  "generate_audio": bool(world.fmt["audio"]), "watermark": False}
     with patched_config(overrides):
-        r, status = _run([sys.executable, str(VW / "scripts/generate_video_from_reference.py"), "--img", str(keyframe),
+        r, status = _run([sys.executable, str(ARK / "generate_video_from_reference.py"), "--img", str(keyframe),
                           "--prompt", str(prompt_file), "--output", str(out), "--log-dir", str(log_dir)])
     if r.returncode == 0 and out.exists():
         return True, "done"
     paid = "task_id" in r.stderr or "task id" in r.stderr.lower()
-    hint = (f" — task already submitted (paid): recover it with python {VW / 'scripts/resume_video_task.py'} "
+    hint = (f" — task already submitted (paid): recover it with python {ARK / 'resume_video_task.py'} "
             f"--task-id <id from {log_dir}> --output {out}") if paid else ""
     return False, status + hint
 

@@ -1,7 +1,7 @@
 """Link every HTML page of a world together.
 
 `stamp(world, page)` writes a navigation bar at the top of a page: a link back to the Tasks list on
-project_overview.html, the task the page belongs to, and tabs for the task's other pages. It sits between
+world.html, the task the page belongs to, and tabs for the task's other pages. It sits between
 `<!-- nav:start -->` and `<!-- nav:end -->`, so stamping again replaces it. Page generators stamp what they write;
 build_overview.py restamps every page.
 
@@ -71,7 +71,7 @@ def tasks(world):
 
 def nav_html(world, page):
     page = Path(page).resolve()
-    crumbs = [f"<a href='{wl.rel(world.overview, page.parent)}'>{e(world.name)}</a>"]
+    crumbs = [f"<a href='{wl.rel(world.overview, page.parent)}'>My World</a>"]
     tabs = ""
     task = next((p for p in page.parents if p.parent == world.tasks_dir), None)
     if task:

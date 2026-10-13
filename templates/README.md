@@ -2,7 +2,7 @@
 
 A "My World" project: characters, places and voices that every story is built on.
 
-- **Start page:** [`project_overview.html`](project_overview.html) (rebuild: my-world `build_overview.py`).
+- **Start page:** [`world.html`](world.html) (rebuild: my-world `build_overview.py`).
 - **Canon:** [`Identities.md`](Identities.md) (characters, voices) and [`Setting.md`](Setting.md) (world, locations,
   props). Every keyframe and video prompt takes its style, characters, location and props from their
   `<!-- prompt:... -->` blocks. Change a character or a place there, never in a single prompt.

@@ -1,5 +1,7 @@
 # Secrets
 credential*.json
+# ...except the placeholder template, which is meant to be committed as a setup reference
+!credential_tmp.json
 
 # Runtime folders — raw material from the user (_input/) and the generated worlds (_world/)
 _input/

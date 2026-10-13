@@ -1,0 +1,13 @@
+{
+  "maas_api_endpoint": "https://ark.ap-southeast.bytepluses.com/api/v3",
+  "image_model_id": "dola-seedream-5-0-pro-260628",
+  "image_size": "2K",
+  "video_model_id": "dreamina-seedance-2-5-260628",
+  "video_resolution": "720p",
+  "video_ratio": "16:9",
+  "video_duration_seconds": 15,
+  "generate_audio": true,
+  "watermark": false,
+  "poll_interval_seconds": 15,
+  "max_polls": 120
+}
