@@ -20,7 +20,7 @@ import worldlib as wl  # noqa: E402
 
 e = html.escape
 DOCS = [("Identities.md", "Characters and voices"), ("Setting.md", "World, locations, props"),
-        ("README.md", "Status and session log"), ("world.json", "Manifest and format")]
+        ("world.md", "Status and session log"), ("world.json", "Manifest and format")]
 STEPS = [("Topic", "You give a topic or idea"), ("Keyframes", "Designs rendered, you pick 👍/👎 on keyframes.html"),
          ("Script", "Timed shots and dialogue from the canon"),
          ("Short footage", "One clip from an approved keyframe"),

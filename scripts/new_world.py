@@ -1,4 +1,4 @@
-"""Create the skeleton of the world in the skill's _world/: world.json, Identities.md, Setting.md, README.md, folders.
+"""Create the skeleton of the world in the skill's _world/: world.json, Identities.md, Setting.md, world.md, folders.
 
 Usage:  python new_world.py [--name "World name"] [--input [DIR]] [--world DIR]    (name defaults to "My World")
 There is only one world: _world/ is the world folder itself (--world DIR overrides it, for tests).
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     root.mkdir(parents=True, exist_ok=True)
     for f in FOLDERS:
         (root / f).mkdir(parents=True, exist_ok=True)
-    for t in ("world.json", "Identities.md", "Setting.md", "README.md"):
+    for t in ("world.json", "Identities.md", "Setting.md", "world.md"):
         dst = root / t
         if dst.exists():
             print(f"kept existing {t}")

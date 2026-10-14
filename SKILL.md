@@ -23,7 +23,7 @@ my-world/               (this skill)
     world.json            manifest: name, tagline, format (ratio, sizes, durations, audio), characters, group pictures
     Identities.md         canon: style, each character (look, size, personality, voice), the cast together, audio rule
     Setting.md            canon: the world, its look, locations, recurring props, rules
-    README.md             status, lessons learned, session log, pending tasks
+    world.md              status, lessons learned, session log, pending tasks
     world.html            the "My World" page (build_overview.py): characters, voices, world, locations, props, tasks
     _asset/               only what generation uses: <char>.png sheets, settings/<loc>.png, props/<prop>.png,
                           voices/<char>.wav, group pictures, height_chart.png
@@ -83,12 +83,47 @@ skill's `credential.json` (git-ignored; template `credential_tmp.json`): `model_
 `worldlib.py check` first; **if it prints `DEPENDENCY ERROR`, stop and give the user the message verbatim**, do not
 work around it.
 
+## Prerequisites: check them before any work starts
+
+Before building (or adding to) a world, check the list below against what the user has given and **tell the user
+in one message everything mandatory that is still missing**, with where to put it. Do not start generating until
+the mandatory items are there; ask for the recommended ones in the same message, but they do not block.
+
+**Setup (mandatory, once):** `worldlib.py check` passes. It needs:
+
+| Item | For | Where |
+|---|---|---|
+| Python 3 with `requests`, `Pillow` (`numpy` for post-processing) | every script | `pip install requests pillow numpy` |
+| BytePlus ARK API key | images (Seedream), videos (Seedance) | `model_ark_key` in the skill's `credential.json` |
+| BytePlus speech API key (a different key: the ARK key is rejected) | voices (Seed Audio), when the format has audio | `speech_model_api_key` in the same file |
+| `ffmpeg` on PATH | voice and video processing | system install |
+
+`credential.json` is git-ignored; copy `credential_tmp.json` to make it. Never ask the user to paste a key in chat:
+ask them to put it in the file (or the env var of the same name) themselves.
+
+**Content (mandatory):** a brief, in the raw input folder or in chat, that gives:
+- **The input folder:** which folder holds the raw material (`_input/`, `upload/`, `mnt/`, `input/`, `in/`, …); ask
+  if `worldlib.py inputs` finds none or several.
+- **The cast:** each character's name, species and age, looks (hair/fur, eyes, clothes, colours), personality, how
+  they talk, and **real sizes as numbers** (height in cm; shoulder height for animals).
+- **The world:** place and era, the home base, and 3–6 other locations.
+- **The art style** (e.g. 3D Pixar-like cartoon).
+- **The format:** aspect ratio, short-clip and long-take lengths, audio or not (music, or conversation only).
+- **Languages:** what each character speaks, and any accent or dialect rule.
+
+**Recommended (strongly; they anchor the results far better than text):**
+- **Character sheets or photos** (front, side, back): a good sheet is used directly once it passes the raw-picture checks.
+- **One picture per location:** it fixes the layout of the set.
+- **Prop photos** for recurring objects.
+- **Voice recordings, 30 s or less per character:** voices are cloned from them; otherwise they are designed from text.
+
+**Decided along the way, with the user:** approve the character sheets, then the location sets, then the group
+pictures and height chart, then the voices.
+
 ## Building the world (only when `_world/` has no world.json)
 
-1. **Interview** (short; skip what the user already said). The cast: who, how many, names, species/age, looks,
-   personality, how each talks, relative sizes. The place and era; the home base and 3–6 other locations; the art
-   style; the format (ratio, short-clip length, long-take length, music or conversation only); language(s). Ask for
-   any photos or sketches (characters, rooms, props, voices): they anchor the pictures far better than text.
+1. **Interview** (short; skip what the user already said): fill the gaps in the mandatory content above, item by
+   item, and ask once for the recommended pictures and recordings.
 2. **Skeleton:** `new_world.py --input [DIR]` (the world is called "My World"; keep `name`, the tagline and the file
    headings general, without character names, since more casts may be merged in). Put the user's photos in `_reference/characters/refs/<char>*.jpg`,
    `_reference/settings/refs/<loc>_photo.jpg`, `_reference/props/refs/<prop>*.jpg`, voices in `_reference/voices/refs/`.
@@ -109,7 +144,7 @@ work around it.
 7. **Voices** (if the format has audio): write `_reference/voices/samples.json` (one sample line per character in
    their own voice, plus a short `turns` dialogue), `voices.py design`, then `voices.py dialogue` and `voices.py page`.
    The user listens on `_reference/voices/voices.html` and approves; delete a clip to redesign it.
-8. **Overview:** `build_overview.py`, then open `world.html` for the user. Update README.md (session log,
+8. **Overview:** `build_overview.py`, then open `world.html` for the user. Update world.md (session log,
    pending tasks, open questions).
 
 Pictures are cheap previews: render them without asking, then present them. Never redraw an approved asset without
@@ -120,7 +155,7 @@ the user asking; an old version is archived automatically when one is redrawn.
 - Change the canon first (the block and the prose around it), then redraw what depends on it (sheet, set, prop),
   then `build_overview.py`. A new location = a new `#### Title (`key`)` section with its `location:<key>` block +
   `world_images.py set <key>`. Never patch a description inside one story's prompt.
-- Decisions the user makes ("keep the pictures as they are", "no music") go into the canon and README right away.
+- Decisions the user makes ("keep the pictures as they are", "no music") go into the canon and world.md right away.
 
 ## Lessons that apply to every world
 
