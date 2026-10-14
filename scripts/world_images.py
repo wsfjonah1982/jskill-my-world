@@ -112,7 +112,8 @@ class Pictures:
             return key, f"prompt written: {pf}"
         out = w.location_image(key)
         out.parent.mkdir(parents=True, exist_ok=True)
-        wl.archive(out, w, "settings")
+        old = wl.archive(out, w, "settings")
+        refs = [old if old and Path(r).resolve() == out.resolve() else r for r in refs]  # redrawing the style ref itself
         return key, wl.gen_image(photos + refs, pf, out, base / "log")
 
     # ----- props
@@ -141,12 +142,13 @@ class Pictures:
         cast = cast or w.default_cast()
         base = self._dirs("groups")
         refs, notes = [], []
+        if location:  # first, as the base picture: later references only add the characters (else the room drifts)
+            refs.append(w.location_image(location))
+            notes.append("image 1 is the location and the base of the picture: keep its exact camera viewpoint, room "
+                         "shape, furniture, furniture positions, colours and light, and only add the characters into it")
         for c in cast:
             refs.append(w.sheet(c))
             notes.append(f"image {len(refs)} is the character sheet of {w.char_label(c)}")
-        if location:
-            refs.append(w.location_image(location))
-            notes.append(f"image {len(refs)} is the location: keep its room, furniture, colours and light")
         hc = w.height_chart()
         if hc and name != "height_chart" and len(cast) > 1:
             refs.append(hc)

@@ -1,4 +1,4 @@
-"""Character voices with BytePlus Seed Audio 1.0 Multilingual (tts/create).
+"""Character voices with BytePlus Seed Audio 1.0 (tts/create; model id from config.json audio_model_id).
 
 Each voice comes from the character's canon block `<!-- prompt:voice:<char> -->` in Identities.md. Once approved, the
 solo clips in _asset/voices/<char>.wav are the characters' voice references for the world.
@@ -168,6 +168,8 @@ audio{{width:100%;margin:8px 0}} li{{margin:4px 0}}</style></head><body><main>
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):  # Chinese line texts on a Windows console
+        stream.reconfigure(encoding="utf-8", errors="replace")
     wdir, args = wl.pop_world_arg(sys.argv[1:])
     world = wl.World(wdir)
     if args and args[0].endswith(".json"):

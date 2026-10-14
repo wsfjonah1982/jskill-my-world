@@ -3,8 +3,13 @@ credential*.json
 # ...except the placeholder template, which is meant to be committed as a setup reference
 !credential_tmp.json
 
-# Runtime folders — raw material from the user (_input/) and the generated worlds (_world/)
+# Runtime folders — the user's raw material (its name depends on the environment) and the generated world
 _input/
+upload/
+uploads/
+mnt/
+input/
+in/
 _world/
 
 # Python

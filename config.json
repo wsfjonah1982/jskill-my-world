@@ -3,6 +3,8 @@
   "image_model_id": "dola-seedream-5-0-pro-260628",
   "image_size": "2K",
   "video_model_id": "dreamina-seedance-2-5-260628",
+  "audio_model_id": "seed-audio-1.0",
+  "audio_api_endpoint": "https://voice.ap-southeast-1.bytepluses.com/api/v3/tts/create",
   "video_resolution": "720p",
   "video_ratio": "16:9",
   "video_duration_seconds": 15,

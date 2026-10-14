@@ -18,7 +18,7 @@
 | `voices_lead`, `docs[]`, `workflow_diagram` | overview extras |
 | `no_props_rule` | sentence used when a frame names no props (stops the model drawing every recurring prop) |
 | `negative_image`, `negative_video` | negative lines appended to image / video prompts |
-| `models` | override `image`, `video`, `speech`, `speech_endpoint` model ids |
+| `models` | override `image`, `video`, `speech`, `speech_endpoint` (defaults: the skill's config.json `image_model_id`, `video_model_id`, `audio_model_id`, `audio_api_endpoint`) |
 | `speech_credential` | optional JSON file with `speech_model_api_key`; default: the skill's `credential.json` (or the env var) |
 | `sheet_size`, `sheet_style` | character-sheet size (default `2K`) and style string (default the `style` block) |
 

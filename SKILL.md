@@ -18,7 +18,7 @@ in it, and every render reads it:
 
 ```
 my-world/               (this skill)
-  _input/               the user's raw material: brief, notes, photos, sketches, voice samples (git-ignored)
+  _input/               the user's raw material (name depends on the environment, see below; git-ignored)
   _world/               the world (git-ignored):
     world.json            manifest: name, tagline, format (ratio, sizes, durations, audio), characters, group pictures
     Identities.md         canon: style, each character (look, size, personality, voice), the cast together, audio rule
@@ -27,14 +27,31 @@ my-world/               (this skill)
     world.html            the "My World" page (build_overview.py): characters, voices, world, locations, props, tasks
     _asset/               only what generation uses: <char>.png sheets, settings/<loc>.png, props/<prop>.png,
                           voices/<char>.wav, group pictures, height_chart.png
-    _reference/           prompts, logs, source photos (*/refs/), input/ (copy of _input), voice samples, archive/
+    _reference/           prompts, logs, source photos (*/refs/), input/ (copy of the raw input), voice samples, archive/
     _tasks/               stories (world-stories skill), one folder per topic
 ```
 
-**Where things go.** Read everything in `_input/` before interviewing: a brief there answers most questions, and
-sheets or photos there are the strongest references. `new_world.py --input` creates the world in `_world/`
-and copies `_input/` to its `_reference/input/`; then sort the pictures (approved sheets → `_asset/<char>.png`, photos
-→ `_reference/*/refs/`). Every script finds `_world/` on its own (`--world DIR` overrides).
+**The raw input folder.** The user's raw material (brief, notes, photos, sketches, voice samples) arrives in a
+folder whose name depends on the environment: `_input/`, `upload/`, `mnt/`, `input/`, `in/`, or wherever the user
+says. **The user decides which folder it is.** `worldlib.py inputs` lists the candidates (env `MY_WORLD_INPUT`
+wins); if it finds none or several, ask the user, never guess. Read everything in it before interviewing: a brief
+there answers most questions, and sheets or photos there are the strongest references. The raw folder may be
+archived or emptied later, so the world must never point at it: `new_world.py --input [DIR]` copies it to the
+world's `_reference/input/` (with `SOURCE.txt` naming where it came from), and every path in the canon and
+world.json points inside `_world/`. For material added to an existing world, copy it into `_reference/input/` the
+same way. Then sort the pictures: photos and sketches → `_reference/*/refs/`; a raw picture goes to `_asset/` only
+after it passes the checks below. Every script finds `_world/` on its own (`--world DIR` overrides).
+
+**Raw pictures used directly as assets.** A user's character sheet, set or prop picture may be good enough to use
+as is (redrawing loses details the user wants). Validate it first, and say what you found:
+1. `worldlib.py inspect <file> sheet|set|any`: resolution at least 1080 px on the short side (the generated assets
+   are 2K), 16:9 like the other assets, RGB, and for a sheet a plain light background at the edges.
+2. Look at it (Read the image): full figures not cropped, the three views (front, side, back) all present and
+   showing the same outfit and colours, sharp hands, faces, hair and feet, no text, logos, watermark or borders, no
+   extra characters, and the same art style as the rest of the world.
+3. It matches the canon, or you change the canon to match it (e.g. hair parting, outfit), so text and picture agree.
+If it passes, copy it into `_asset/` (the old asset is archived) and redraw what depends on it: group pictures, the
+height chart. If it fails, use it as a reference for a redraw instead and tell the user why.
 
 **One world only.** Never create a second world or a sub-folder per world. When `_world/world.json` exists and the
 user asks for a "new world", a new cast or new characters, places or props, **merge them into the existing world**
@@ -52,14 +69,15 @@ Scripts are in `scripts/` (run with `python <skill>/scripts/<name>.py …`; they
 
 | Script | Does |
 |---|---|
-| `new_world.py [--name "…"] [--input]` | skeleton from `templates/` in `_world/`, plus a copy of `_input/`; refuses if a world exists |
-| `worldlib.py check [groups]` | dependencies + canon completeness (`world` group lists every REPLACE left); `canon [key]`; `info` |
+| `new_world.py [--name "…"] [--input [DIR]]` | skeleton from `templates/` in `_world/`, plus a copy of the raw input; refuses if a world exists |
+| `worldlib.py check [groups]` | dependencies + canon completeness (`world` group lists every REPLACE left); `canon [key]`; `info`; `inputs` (raw input folders); `inspect <img>` (fit to use as an asset?) |
 | `world_images.py sheet\|set\|prop\|group\|height …` | draws the reference pictures from the canon (`--dry-run` = prompts only) |
 | `voices.py [script.json] design\|dialogue\|page\|all` | character voices (Seed Audio) → `_asset/voices/` |
 | `build_overview.py` | `world.html` + nav bars on every page |
 
 Generation needs no other skill: `scripts/ark/` holds the Seedream (images) and Seedance (videos) scripts, the
-skill's `config.json` the BytePlus ARK endpoint and defaults (models come from world.json `models`). Keys go in the
+skill's `config.json` the endpoints and default model ids (`image_model_id`, `video_model_id`,
+`audio_model_id`; a world's `models` overrides them). Keys go in the
 skill's `credential.json` (git-ignored; template `credential_tmp.json`): `model_ark_key` for images and videos,
 `speech_model_api_key` for voices (Seed Audio; the ARK key is rejected there). Env vars of the same names win. Run
 `worldlib.py check` first; **if it prints `DEPENDENCY ERROR`, stop and give the user the message verbatim**, do not
@@ -71,7 +89,7 @@ work around it.
    personality, how each talks, relative sizes. The place and era; the home base and 3–6 other locations; the art
    style; the format (ratio, short-clip length, long-take length, music or conversation only); language(s). Ask for
    any photos or sketches (characters, rooms, props, voices): they anchor the pictures far better than text.
-2. **Skeleton:** `new_world.py --input` (the world is called "My World"; keep `name`, the tagline and the file
+2. **Skeleton:** `new_world.py --input [DIR]` (the world is called "My World"; keep `name`, the tagline and the file
    headings general, without character names, since more casts may be merged in). Put the user's photos in `_reference/characters/refs/<char>*.jpg`,
    `_reference/settings/refs/<loc>_photo.jpg`, `_reference/props/refs/<prop>*.jpg`, voices in `_reference/voices/refs/`.
 3. **Write the canon:** fill `world.json`, `Identities.md`, `Setting.md` (one section per character and per location;

@@ -4,8 +4,11 @@ Usage:  python new_world.py [--name "World name"] [--input [DIR]] [--world DIR] 
 There is only one world: _world/ is the world folder itself (--world DIR overrides it, for tests).
 If _world/ already holds a world.json this refuses: a new cast, character, location or prop is merged into the
 existing world (add sections to its Identities.md / Setting.md and entries to world.json), never made a second world.
---input copies the user's raw material (default: the skill's _input/) into _reference/input/, where it is kept as the
-source record; sort the pictures into _reference/*/refs/ or _asset/ afterwards.
+--input DIR copies the user's raw material into _reference/input/, where it stays as the source record (the raw folder
+may be archived later, so the world never points at it). Its name depends on the environment (_input, upload, mnt,
+input, in...) and is the user's choice; --input alone takes the only candidate worldlib.find_inputs() sees (or
+MY_WORLD_INPUT) and stops if there are none or several. Sort the pictures into _reference/*/refs/ or _asset/ afterwards
+(a raw picture goes into _asset/ directly only after worldlib.py inspect and a visual check).
 Afterwards fill every REPLACE in the canon files and world.json (worldlib.py check world lists what is left).
 """
 import shutil
@@ -16,7 +19,6 @@ from pathlib import Path
 SKILL_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES = SKILL_DIR / "templates"
 WORLD_HOME = SKILL_DIR / "_world"
-INPUT_DIR = SKILL_DIR / "_input"
 FOLDERS = ["_asset/settings", "_asset/props", "_asset/voices", "_reference/characters/refs", "_reference/settings/refs",
            "_reference/props/refs", "_reference/voices/refs", "_reference/groups", "_reference/archive", "_tasks"]
 
@@ -35,7 +37,15 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     name, args = _pop(args, "--name")
     name = name or "My World"
-    src, args = _pop(args, "--input", str(INPUT_DIR))
+    src, args = _pop(args, "--input", "auto")
+    if src == "auto":
+        sys.path.insert(0, str(SKILL_DIR / "scripts"))
+        from worldlib import find_inputs
+        found = find_inputs()
+        if len(found) != 1:
+            sys.exit(("No input folder found" if not found else "Several input folders: " + ", ".join(map(str, found)))
+                     + ". Ask the user which folder holds their material and pass it: --input DIR.")
+        src = str(found[0])
     target, args = _pop(args, "--world")
     if args:
         sys.exit(__doc__)
@@ -59,5 +69,7 @@ if __name__ == "__main__":
         if not src.is_dir():
             sys.exit(f"--input folder {src} does not exist.")
         shutil.copytree(src, root / "_reference" / "input", dirs_exist_ok=True)
+        (root / "_reference" / "input" / "SOURCE.txt").write_text(f"copied from {src.resolve()} on {date.today()}\n",
+                                                                  encoding="utf-8")
         print(f"copied {src} -> {root / '_reference' / 'input'}")
     print(f"World skeleton ready at {root}")

@@ -12,6 +12,8 @@ in the MY_WORLD_ARK_OVERRIDES env var. Keys live in the skill's credential.json:
 CLI:  python worldlib.py canon [key] [--world DIR]   list every canon block, or print one
       python worldlib.py check [group ...] [--world DIR]   python | image | video | ffmpeg | voice | world
       python worldlib.py info [--world DIR]   the world's characters, locations and format
+      python worldlib.py inputs   the candidate folders of the user's raw material (MY_WORLD_INPUT, _input, upload, mnt, input, in)
+      python worldlib.py inspect <image> [sheet|set|any]   can a raw picture be used directly as an asset?
 The world folder is --world, else the env var WORLD_DIR, else the nearest folder upwards from the current directory
 that holds a world.json, else the skill's _world/ (one world only: a new cast or place is merged into it).
 """
@@ -31,8 +33,11 @@ ARK = SKILL_DIR / "scripts" / "ark"  # Seedream / Seedance scripts (copied from 
 CONFIG = SKILL_DIR / "config.json"  # Ark endpoint and default settings
 CREDENTIAL = SKILL_DIR / "credential.json"  # model_ark_key (images, videos) + speech_model_api_key (voices)
 OVERRIDES_ENV = "MY_WORLD_ARK_OVERRIDES"
-WORLD_HOME = SKILL_DIR / "_world"  # the one world of this skill (git-ignored); raw user material is in _input/
-INPUT_DIR = SKILL_DIR / "_input"
+WORLD_HOME = SKILL_DIR / "_world"  # the one world of this skill (git-ignored)
+# The user's raw material: the folder name depends on the environment (an upload area, a mount, a plain folder), so
+# the user decides. MY_WORLD_INPUT names it; otherwise any of these names next to the skill or in the cwd is a candidate.
+INPUT_ENV = "MY_WORLD_INPUT"
+INPUT_NAMES = ("_input", "upload", "uploads", "mnt", "input", "in")
 GROUPS = ("python", "image", "video", "ffmpeg", "voice", "world")
 CANON_FILES = ("Identities.md", "Setting.md")
 REQUIRED_BLOCKS = ("style", "characters", "video-defs", "video-rules", "audio", "world")
@@ -40,14 +45,61 @@ _BLOCK = re.compile(r"<!--\s*prompt:([\w:-]+)\s*-->\s*```[^\n]*\n(.*?)```", re.S
 
 DEFAULT_FORMAT = {"ratio": "16:9", "keyframe_size": "2560x1440", "resolution": "720p", "short_min": 10,
                   "short_max": 20, "short_options": [10, 15, 20], "segment_seconds": 20, "audio": True}
-DEFAULT_MODELS = {"image": "dola-seedream-5-0-pro-260628", "video": "dreamina-seedance-2-5-260628",
-                  "speech": "seed-audio-1.0-multilingual",
-                  "speech_endpoint": "https://voice.ap-southeast-1.bytepluses.com/api/v3/tts/create"}
+_CFG = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.is_file() else {}
+# Model ids come from config.json (image_model_id, video_model_id, audio_model_id); world.json `models` overrides.
+DEFAULT_MODELS = {"image": _CFG.get("image_model_id", "dola-seedream-5-0-pro-260628"),
+                  "video": _CFG.get("video_model_id", "dreamina-seedance-2-5-260628"),
+                  "speech": _CFG.get("audio_model_id", "seed-audio-1.0"),
+                  "speech_endpoint": _CFG.get("audio_api_endpoint",
+                                              "https://voice.ap-southeast-1.bytepluses.com/api/v3/tts/create")}
 RATIO_WORDS = {"16:9": "Horizontal 16:9 landscape", "9:16": "Vertical 9:16 portrait", "1:1": "Square 1:1"}
 NEG_IMAGE = ("no text, no captions, no speech bubbles, no logo, no brand names, no watermark, no readable signs or "
              "screens, no extra people or animals, no split panels, no borders.")
 NEG_VIDEO = ("no watermark, no logo, no brand text, no subtitles, no captions, no on-screen text, subtitle-free, "
              "no twin subjects, no style drift, keep the art style of @image1 throughout, no flicker.")
+
+
+# ---------------------------------------------------------------- the user's raw input
+def find_inputs():
+    """Candidate raw-input folders: [MY_WORLD_INPUT] when set, else every existing INPUT_NAMES folder next to the skill
+    or in the cwd. More than one (or none) means: ask the user which folder holds their material."""
+    if os.environ.get(INPUT_ENV):
+        return [Path(os.environ[INPUT_ENV]).resolve()]
+    found = []
+    for base in (SKILL_DIR, Path.cwd()):
+        for n in INPUT_NAMES:
+            p = (base / n).resolve()
+            if p.is_dir() and p not in found and p != WORLD_HOME.resolve():
+                found.append(p)
+    return found
+
+
+def inspect_image(path, kind="sheet"):
+    """Measurable conditions for using a raw picture directly as an asset. Returns (facts, problems).
+    kind: sheet (character three-view on a plain background), set (empty location), any."""
+    from PIL import Image, ImageFilter, ImageStat
+    im = Image.open(path)
+    w, h = im.size
+    facts = {"size": f"{w}x{h}", "ratio": round(w / h, 3), "mode": im.mode}
+    problems = []
+    if min(w, h) < 1080:
+        problems.append(f"short side {min(w, h)}px < 1080px (generated assets are 2K: 2560x1440 or 2816x1584)")
+    if kind in ("sheet", "set") and abs(w / h - 16 / 9) > 0.03:
+        problems.append(f"aspect {w}:{h} is not 16:9 like the other assets")
+    g = im.convert("L")
+    sharp = ImageStat.Stat(g.filter(ImageFilter.FIND_EDGES)).var[0]
+    facts["edge_variance"] = round(sharp, 1)  # for comparing pictures only: blur is judged by looking, not by this
+    if kind == "sheet":
+        rgb = im.convert("RGB")
+        strips = [rgb.crop(b) for b in ((0, 0, w, h // 20), (0, 0, w // 40, h), (w - w // 40, 0, w, h))]
+        mean = [sum(ImageStat.Stat(s).mean) / 3 for s in strips]
+        spread = max(sum(ImageStat.Stat(s).stddev) / 3 for s in strips)
+        facts["border_brightness"] = round(min(mean)); facts["border_noise"] = round(spread, 1)
+        if min(mean) < 200 or spread > 12:
+            problems.append("background at the edges is not plain and light (a sheet needs a clean backdrop)")
+    if im.mode in ("P", "L", "1"):
+        problems.append(f"colour mode {im.mode}: convert to RGB")
+    return facts, problems
 
 
 # ---------------------------------------------------------------- the world
@@ -346,12 +398,15 @@ def gen_video(world, keyframe, prompt_file, duration, out, log_dir):
 
 
 def archive(path, world, kind):
-    """Move an existing asset to _reference/archive/<kind>/ with a timestamp before it is redrawn."""
+    """Move an existing asset to _reference/archive/<kind>/ with a timestamp before it is redrawn; returns the new path."""
     path = Path(path)
     if path.exists():
         dst = world.root / "_reference" / "archive" / kind
         dst.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(path), str(dst / f"{path.stem}_{datetime.now():%Y%m%d_%H%M%S}{path.suffix}"))
+        dst = dst / f"{path.stem}_{datetime.now():%Y%m%d_%H%M%S}{path.suffix}"
+        shutil.move(str(path), str(dst))
+        return dst
+    return None
 
 
 def rel(path, base):
@@ -385,5 +440,17 @@ if __name__ == "__main__":
         for k in w.locations():
             print(f"  location {k}: picture {'ok' if w.location_image(k).is_file() else 'MISSING'}")
         print(f"  format: {w.fmt}")
+    elif cmd == "inputs":
+        found = find_inputs()
+        for p in found:
+            print(f"{p}  ({sum(1 for f in p.rglob('*') if f.is_file())} files)")
+        if len(found) != 1:
+            print(("No" if not found else "Several") + " input folders found: ask the user which folder holds their "
+                  f"material, then pass it as --input DIR (or set {INPUT_ENV}).")
+    elif cmd == "inspect" and len(args) > 1:
+        facts, problems = inspect_image(args[1], args[2] if len(args) > 2 else "sheet")
+        print("  ".join(f"{k}={v}" for k, v in facts.items()))
+        print("\n".join(f"PROBLEM: {p}" for p in problems) or "measurable checks OK: now look at it (see SKILL.md)")
     else:
-        sys.exit("usage: worldlib.py canon [key] | check [group ...] | info  [--world DIR]")
+        sys.exit("usage: worldlib.py canon [key] | check [group ...] | info | inputs | inspect <image> [sheet|set|any]"
+                 "  [--world DIR]")
