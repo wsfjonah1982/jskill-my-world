@@ -157,16 +157,110 @@ class Overview:
         docs = "".join(f"<a class=doc href='{e(f)}'><b>{e(f)}</b><span>{e(d)}</span></a>"
                        for f, d in DOCS + [tuple(x) for x in cfg.get("docs", [])] if self.exists(f))
         chips = "".join(f"<span>{e(c)}</span>" for c in cfg.get("chips", []))
+        evp = w.root / "_reference" / "evaluation" / "evaluation.json"
+        ev = json.loads(evp.read_text(encoding="utf-8")) if evp.is_file() else None
+        eval_html = ""
+        usp = w.root / "_reference" / "log" / "usage.json"
+        us = json.loads(usp.read_text(encoding="utf-8")) if usp.is_file() else None
+        usage_html = ""
+        if us:
+            k = lambda n: f"{n / 1e6:.2f}M" if n >= 1e6 else f"{n / 1e3:.1f}k" if n >= 1e3 else str(n)
+            grow = "".join(f"<tr><td>{e(x['model'])}</td><td>{x['calls']}</td><td>{e(', '.join(f'{n} {t}' for t, n in x['kinds'].items()))}</td>"
+                           f"<td>{x['failed']}</td><td>{k(x['tokens']) if x['tokens'] else '–'}</td>"
+                           f"<td>{str(x.get('audio_s')) + ' s' if x.get('audio_s') else '–'}</td></tr>" for x in us["generation"])
+            arow = "".join(f"<tr><td>{e(x['model'])}</td><td>{x['sessions']}</td><td>{x['requests']}</td><td>{k(x['input'])}</td>"
+                           f"<td>{k(x['cache_write'])}</td><td>{k(x['cache_read'])}</td><td>{k(x['output'])}</td>"
+                           f"<td><b>{k(x['total'])}</b></td></tr>" for x in us["agent"])
+            usage_html = (f"<section id=usage><h2>Model usage</h2><p class=lead>Every model call, from "
+                          f"<code>_reference/log/llm_usage.jsonl</code> and the agent's session transcripts "
+                          f"(<code>llm_usage.py</code>); updated {e(us['date'][:16].replace('T', ' '))} UTC.</p><div class=evals>"
+                          f"<div class=card><b>{us['generation_calls']}</b><span>Generation calls</span></div>"
+                          f"<div class=card><b>{k(us['generation_tokens'])}</b><span>Generation tokens</span></div>"
+                          f"<div class=card><b>{k(us['agent_tokens'])}</b><span>Agent tokens ({us['agent_sessions']} sessions)</span></div>"
+                          f"<div class=card><b>{k(us['agent_output_tokens'])}</b><span>Agent output tokens</span></div></div>"
+                          "<h3>Generation (images, sheets, videos, voices)</h3><table class=evt><tr><th>Model</th><th>Calls</th>"
+                          f"<th>Kinds</th><th>Failed</th><th>Tokens</th><th>Audio</th></tr>{grow}</table>"
+                          "<h3>Agent (LLM)</h3><table class=evt><tr><th>Model</th><th>Sessions</th><th>Requests</th><th>Input</th>"
+                          f"<th>Cache write</th><th>Cache read</th><th>Output</th><th>Total</th></tr>{arow}</table></section>")
+        if ev:
+            num = lambda v, unit="": "?" if v is None else f"{v}{unit}"
+            ST = {"ok": "Pass", "warn": "Check", "bad": "Fail"}
+            th = ev.get("status") or {"score": {"pass": 75, "check": 60}, "criterion": {"pass": 4, "check": 3}}
+            sp, sc, cp, cc = th["score"]["pass"], th["score"]["check"], th["criterion"]["pass"], th["criterion"]["check"]
+            wq, wb = (f"{v:.0%}" for v in (ev.get("weights") or {"quality": .5, "breadth": .5}).values())
+            st = lambda lv: f"<span class='st st-{lv}'>{ST[lv]}</span>"
+            lvl = lambda v, ok, warn: "ok" if v is not None and v >= ok else "warn" if v is not None and v >= warn else "bad"
+            ul = lambda xs: f"<ul>{''.join(f'<li>{e(x)}</li>' for x in xs)}</ul>" if xs else "<p class=mut>None.</p>"
+            rows = "".join(f"<tr class=r-{lvl(c['score'], cp, cc)}><td>{st(lvl(c['score'], cp, cc))}</td><td>{e(c['label'])}</td>"
+                           f"<td>{c['weight']}</td><td><span class=bar style='--v:{((c['score'] or 1) - 1) * 25}%'></span> "
+                           f"{num(c['score'])}/5</td><td class=mut>{e(c['note'])}</td></tr>" for c in ev["criteria"])
+            areas, brows = ev.get("completeness_areas") or [], ev.get("breadth_rows") or []
+            blv = lambda x: "ok" if x["count"] >= x["full"] else "warn" if x["count"] >= x["minimum"] else "bad"
+            qcalc = " + ".join(f"{c['weight']} × ({num(c['score'])}−1)/4" for c in ev["criteria"])
+            parts = [
+                ("d-overall", "Overall", f"<p><b>Overall = {e(ev.get('overall_calc') or 'quality and breadth, once quality is scored')}</b></p>"
+                 f"<p class=mut>{wq} quality + {wb} breadth. A missing checklist item or an unapproved asset means not ready "
+                 f"for stories, whatever the score. Rules: <code>{e(ev.get('scoring_file', 'templates/scoring.json'))}</code>"
+                 " (method: references/scoring.md).</p>"),
+                ("d-quality", "Quality", f"<p><b>Quality = ({qcalc}) / {sum(c['weight'] for c in ev['criteria'])} × 100 = "
+                 f"{num(ev['quality'])}</b></p><p class=mut>Each criterion scored 1–5 by the reviewer after looking at every "
+                 f"picture; reviewed {e(ev.get('review_date') or 'never')}.</p><table class=evt><tr><th></th><th>Criterion</th>"
+                 f"<th>Weight</th><th>Score</th><th>Note</th></tr>{rows}</table>"),
+                ("d-breadth", "Breadth", f"<p><b>Breadth = {e(ev.get('breadth_calc', ''))}</b></p><p class=mut>Part score = "
+                 "count / full marks, at most 100; points = weight × part score.</p><table class=evt><tr>"
+                 "<th></th><th>Part</th><th>Weight</th><th>Count</th><th>Min</th><th>Full</th><th>Score</th><th>Points</th></tr>"
+                 + "".join(f"<tr class=r-{blv(x)}><td>{st(blv(x))}</td><td>{e(x['part'])}</td><td>{x['weight']}</td><td>{x['count']}"
+                           f"{' <b class=bad>below min</b>' if x['count'] < x['minimum'] else ''}</td><td>{x['minimum']}</td>"
+                           f"<td>{x['full']}</td><td>{x['score']}</td><td>{x['points']}</td></tr>" for x in brows)
+                 + f"<tr><td></td><td><b>Total</b></td><td>100</td><td></td><td></td><td></td><td></td><td><b>{ev['breadth']}</b></td></tr></table>"),
+                ("d-check", "Checklist", f"<p><b>Checklist = {ev.get('completeness_done', '?')} / {ev['items']} items = "
+                 f"{ev['completeness']}%</b></p><p class=mut>Not scored: every item is needed before stories.</p>"
+                 "<table class=evt><tr><th></th><th>Area</th><th>Done</th><th>Missing</th></tr>"
+                 + "".join(f"<tr class=r-{'ok' if x['done'] == x['total'] else 'bad'}><td>{st('ok' if x['done'] == x['total'] else 'bad')}</td><td>{e(x['area'])}</td><td>{x['done']}/{x['total']}</td><td class=mut>"
+                           f"{e(', '.join(x['missing']) or '–')}</td></tr>" for x in areas) + "</table>"
+                 + (f"<h4>Technical problems</h4>{ul(ev['problems'])}" if ev.get("problems") else "")),
+                ("d-approve", "Approvals", f"<p><b>{ev.get('approved', 0)} of {ev.get('assets', 0)} assets approved by you</b></p>"
+                 f"<h4>{st('warn')} Waiting for your approval</h4>{ul(ev.get('pending_approval', []))}"),
+                ("d-issues", "Issues", (f"<p>{st('warn')} Open problems found in the review.</p>" if ev.get("issues") else "")
+                 + ul(ev.get("issues", []))),
+            ]
+            card = lambda d, v, label, lv: (f"<button type=button class='card c-{lv}' data-go={d}><b>{v}</b><span>"
+                                            f"{st(lv)} {label}</span></button>")
+            cards = (card("d-overall", num(ev["overall"]), "Overall / 100", lvl(ev["overall"], sp, sc))
+                     + card("d-quality", num(ev["quality"]), f"Quality · {wq}", lvl(ev["quality"], sp, sc))
+                     + card("d-breadth", num(ev.get("breadth")), f"Breadth · {wb}", lvl(ev.get("breadth"), sp, sc))
+                     + card("d-check", num(ev["completeness"], "%"), "Checklist · not scored",
+                            "ok" if ev["completeness"] == 100 else "bad")
+                     + card("d-approve", f"{ev.get('approved', 0)}/{ev.get('assets', 0)}", "Approved by you",
+                            "ok" if not ev.get("pending_approval") else "warn"))
+            todo = [f"<a href=#evaluation data-go={d}>{t}</a>" for d, t in (
+                ("d-check", f"{len(ev.get('missing', []))} checklist items missing"),
+                ("d-approve", f"{len(ev.get('pending_approval', []))} assets to approve"),
+                ("d-issues", f"{len(ev.get('issues', []))} open issues")) if not t.startswith("0 ")]
+            dlg = ("<dialog id=scoredlg><div class=dlghead><b>How the score is calculated</b><button type=button "
+                   "class=x aria-label=Close onclick=\"this.closest('dialog').close()\">×</button></div><div class=dlgbody>"
+                   + f"<p class=legend>{st('ok')} passed {st('warn')} passed with remarks: check or improve {st('bad')} failed</p>"
+                   + "".join(f"<section id={d} class=dpart><h3>{t}</h3>{body}</section>" for d, t, body in parts)
+                   + "</div></dialog>")
+            eval_html = (f"<section id=evaluation><h2>Evaluation</h2><p class=lead>{e(ev['date'])} · <b>{e(ev['band'].split(':')[0])}</b>"
+                         f"{' · <b class=warn>review is stale</b>' if ev.get('review_stale') else ''}</p>"
+                         f"<div class=evals>{cards}</div><p>{' · '.join(todo)}{' · ' if todo else ''}"
+                         f"<a href=#evaluation data-go=d-overall><b>Score details</b></a></p>{dlg}"
+                         "<script>document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',ev=>{"
+                         "ev.preventDefault();document.getElementById('scoredlg').showModal();"
+                         "document.getElementById(b.dataset.go).scrollIntoView({block:'start'})}));"
+                         "document.getElementById('scoredlg').addEventListener('click',ev=>{if(ev.target.id==='scoredlg')"
+                         "ev.target.close()})</script></section>")
         nav = [("characters", "Characters")] + ([("voices", "Voices")] if dialogue else []) + \
               [("world", "World"), ("locations", "Locations")] + ([("props", "Props")] if props_html else []) + \
-              [("workflow", "Workflow"), ("docs", "Docs"), ("tasks", "Tasks")]
+              [("workflow", "Workflow")] + ([("evaluation", "Evaluation")] if eval_html else []) + ([("usage", "Usage")] if usage_html else []) +               [("docs", "Docs"), ("tasks", "Tasks")]
 
         page = f"""<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>My World</title>
 <style>
-:root{{--bg:#f5f8f7;--fg:#1c2928;--mut:#5b6e6b;--card:#fff;--line:#dce6e4;--brand:#2f7d73;--warn:#b56b16;--chip:#eef4f3}}
-@media (prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#121818;--fg:#e5eeec;--mut:#9cb0ad;--card:#1b2423;--line:#2c3a39;--brand:#6cc3b6;--warn:#e7a456;--chip:#22302f}}}}
-:root[data-theme=dark]{{--bg:#121818;--fg:#e5eeec;--mut:#9cb0ad;--card:#1b2423;--line:#2c3a39;--brand:#6cc3b6;--warn:#e7a456;--chip:#22302f}}
+:root{{--bg:#f5f8f7;--fg:#1c2928;--mut:#5b6e6b;--card:#fff;--line:#dce6e4;--brand:#2f7d73;--warn:#b56b16;--ok:#2e7d32;--bad:#c62828;--chip:#eef4f3}}
+@media (prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#121818;--fg:#e5eeec;--mut:#9cb0ad;--card:#1b2423;--line:#2c3a39;--brand:#6cc3b6;--warn:#e7a456;--ok:#6fcf7a;--bad:#f07b7b;--chip:#22302f}}}}
+:root[data-theme=dark]{{--bg:#121818;--fg:#e5eeec;--mut:#9cb0ad;--card:#1b2423;--line:#2c3a39;--brand:#6cc3b6;--warn:#e7a456;--ok:#6fcf7a;--bad:#f07b7b;--chip:#22302f}}
 *{{box-sizing:border-box}} body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}}
 main{{max-width:1180px;margin:auto;padding:28px 16px 64px}} a{{color:var(--brand)}}
 header h1{{font-size:clamp(26px,4vw,38px);margin:0 0 6px}} header p{{color:var(--mut);margin:0;max-width:760px}}
@@ -194,6 +288,21 @@ ul{{margin:0;padding-left:18px}} li{{margin:2px 0}} audio{{width:100%;margin:4px
 .tasks{{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--line);border-radius:14px}}
 .tasks li{{display:flex;gap:16px;padding:10px 16px;margin:0;border-top:1px solid var(--line)}} .tasks li:first-child{{border-top:0}}
 .tasks time{{color:var(--mut);font-variant-numeric:tabular-nums;flex:none}} .tasks small{{color:var(--mut)}} footer{{margin-top:48px;color:var(--mut);font-size:13px}}
+.evals{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}} .evals .card{{padding:14px 16px}}
+.evals b{{display:block;font-size:30px}} .evals span{{color:var(--mut);font-size:13px}}
+.evt{{width:100%;border-collapse:collapse;font-size:14px;display:block;overflow-x:auto}} .evt td,.evt th{{text-align:left;padding:8px;border-top:1px solid var(--line);vertical-align:top}}
+.evals .card{{font:inherit;text-align:left;cursor:pointer;color:inherit}} .evals .card:hover{{border-color:var(--brand)}}
+dialog#scoredlg{{width:min(860px,calc(100vw - 32px));max-height:85vh;padding:0;border:1px solid var(--line);border-radius:14px;background:var(--card);color:inherit}}
+dialog#scoredlg::backdrop{{background:rgba(0,0,0,.45)}} .dlghead{{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}}
+.dlgbody{{padding:4px 16px 16px;overflow:auto;max-height:calc(85vh - 52px)}} .dpart h3{{margin:14px 0 4px}}
+.st{{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:9px;color:#fff;vertical-align:1px}}
+.st-ok{{background:var(--ok)}} .st-warn{{background:var(--warn)}} .st-bad{{background:var(--bad)}} .bad{{color:var(--bad)}}
+.evt tr.r-ok td:first-child{{box-shadow:inset 3px 0 var(--ok)}} .evt tr.r-warn td:first-child{{box-shadow:inset 3px 0 var(--warn)}}
+.evt tr.r-bad td:first-child{{box-shadow:inset 3px 0 var(--bad)}} .evt tr.r-bad{{background:color-mix(in srgb,var(--bad) 7%,transparent)}}
+.evals .c-ok{{border-top:4px solid var(--ok)}} .evals .c-warn{{border-top:4px solid var(--warn)}} .evals .c-bad{{border-top:4px solid var(--bad)}}
+.evals .c-bad b{{color:var(--bad)}} .evals .st{{color:#fff}} .legend{{margin:12px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--mut)}}
+.x{{font-size:22px;line-height:1;background:none;border:0;color:inherit;cursor:pointer}} .warn{{color:var(--warn)}}
+.bar{{display:inline-block;width:60px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--brand) var(--v),var(--line) var(--v))}}
 </style></head><body><main>
 <header><h1>My World</h1><p>{e(cfg.get('tagline', ''))}</p><div class=facts>{chips}</div></header>
 <nav class=sec>{''.join(f'<a href=#{a}>{e(b)}</a>' for a, b in nav)}</nav>
@@ -208,6 +317,8 @@ Every render uses these sheets as references.</p><div class='grid three'>{chars}
 {props_html}
 <section id=workflow><h2>How stories are made</h2><p class=lead>With the <b>world-stories</b> skill. You approve at every gate; videos are only rendered after approval.</p>{steps}</section>
 
+{eval_html}
+{usage_html}
 <section id=docs><h2>Documents</h2><div class=docs>{docs}</div></section>
 
 <section id=tasks><h2>Tasks</h2><p class=lead>One folder per topic in <code>_tasks/</code>, newest first. On each page, <b>Copy feedback</b> and paste it to the Agent.</p>{task_list}</section>

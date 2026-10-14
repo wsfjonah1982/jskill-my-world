@@ -1,4 +1,4 @@
-"""Character voices with BytePlus Seed Audio 1.0 (tts/create; model id from config.json audio_model_id).
+"""Character voices with BytePlus Seed Audio 1.0 (tts/create; model id from aigc_config.json audio_model_id).
 
 Each voice comes from the character's canon block `<!-- prompt:voice:<char> -->` in Identities.md. Once approved, the
 solo clips in _asset/voices/<char>.wav are the characters' voice references for the world.
@@ -31,6 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import worldlib as wl  # noqa: E402
+import llm_usage  # noqa: E402  the token ledger
 
 MAX_PROMPT_CHARS = 3000
 
@@ -77,6 +78,8 @@ class Voices:
                    "audio_config": {"format": "wav", "sample_rate": 24000, "enable_subtitle": True},
                    "watermark": {"aigc_watermark": False}}
         self.log(f"request {out.name}: {len(references)} reference(s)\n{prompt}")
+        t0 = time.monotonic()
+        spent = lambda: round(time.monotonic() - t0, 2)
         for attempt in (1, 2, 3):  # connection errors (e.g. TLS resets) happen before any result exists
             try:
                 r = requests.post(self.w.models["speech_endpoint"], json=payload, timeout=180,
@@ -86,19 +89,30 @@ class Voices:
             except requests.exceptions.ConnectionError as ex:
                 self.log(f"attempt {attempt} connection error: {ex}")
                 if attempt == 3:
+                    llm_usage.record("voice", self.w.models["speech"], "failed", output=out, error=ex,
+                                     duration_s=spent())
                     raise SystemExit(f"tts/create unreachable after 3 attempts: {ex}")
                 time.sleep(5 * attempt)
         if not r.ok:
             self.log(f"HTTP {r.status_code}: {r.text[:500]}")
+            llm_usage.record("voice", self.w.models["speech"], "failed", output=out, error=f"HTTP {r.status_code}",
+                             duration_s=spent())
             raise SystemExit(f"tts/create HTTP {r.status_code} for {out.name}: {r.text[:300]}")
         d = r.json()
         if d.get("code") not in (0, None):
+            llm_usage.record("voice", self.w.models["speech"], "failed", output=out, error=d.get("message"),
+                             duration_s=spent())
             raise SystemExit(f"tts/create failed: code={d.get('code')} message={d.get('message')}")
         out.write_bytes(base64.b64decode(d["audio"]) if d.get("audio") else requests.get(d["url"], timeout=180).content)
         spoken = (d.get("subtitle") or {}).get("text", "")
         self.meta[out.name] = {"duration": d.get("duration"), "spoken": spoken}
         self.meta_path.write_text(json.dumps(self.meta, indent=2, ensure_ascii=False), encoding="utf-8")
         self.log(f"saved {out.name} duration={d.get('duration')} spoken={spoken!r}")
+        u = d.get("usage") or {}  # the speech API reports no tokens today; audio seconds and prompt chars instead
+        llm_usage.record("voice", self.w.models["speech"], "succeeded", output=out, audio_s=d.get("duration"),
+                         chars_in=len(prompt), tokens_in=u.get("input_tokens") or u.get("prompt_tokens"),
+                         tokens_out=u.get("output_tokens") or u.get("completion_tokens"),
+                         tokens_total=u.get("total_tokens"), duration_s=spent())
         print(f"{out.name}: {d.get('duration')}s  spoken: {spoken}", flush=True)
 
     def clip(self, char):

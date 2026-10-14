@@ -23,7 +23,7 @@ def main() -> int:
                     "description alone."
     )
     parser.add_argument("--idea",   required=True, help="Path to a .txt file describing the subject's appearance")
-    parser.add_argument("--style",  default=None, help="Art style (defaults to config.json's default_style)")
+    parser.add_argument("--style",  default=None, help="Art style (defaults to aigc_config.json's default_style)")
     parser.add_argument("--img",    default=None, nargs="+", help="Optional reference photo(s) to anchor appearance/style")
     parser.add_argument("--output", default=str(OUTPUT_PATH), help="Output image file path")
     parser.add_argument("--log-dir", default=str(LOG_DIR), help="Directory for the .log JSON record (defaults to _world/_reference/log)")

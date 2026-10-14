@@ -6,7 +6,7 @@ code block — are pasted word for word into every image and video prompt, so ev
 consistent. Change a character or a place there, never in a single prompt.
 
 Generation runs through this skill's own scripts/ark/ (Seedream images, Seedance videos, BytePlus ARK API), with
-config.json for the endpoint and defaults; the settings of one call (model, size, ratio…) are passed to those scripts
+aigc_config.json for the endpoint and defaults; the settings of one call (model, size, ratio…) are passed to those scripts
 in the MY_WORLD_ARK_OVERRIDES env var. Keys live in the skill's credential.json: `model_ark_key` (images, videos) and `speech_model_api_key` (voices).
 
 CLI:  python worldlib.py canon [key] [--world DIR]   list every canon block, or print one
@@ -30,7 +30,7 @@ from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 ARK = SKILL_DIR / "scripts" / "ark"  # Seedream / Seedance scripts (copied from video-workflow; no other skill needed)
-CONFIG = SKILL_DIR / "config.json"  # Ark endpoint and default settings
+CONFIG = SKILL_DIR / "aigc_config.json"  # AIGC model config: endpoints, model ids, default generation settings
 CREDENTIAL = SKILL_DIR / "credential.json"  # model_ark_key (images, videos) + speech_model_api_key (voices)
 OVERRIDES_ENV = "MY_WORLD_ARK_OVERRIDES"
 WORLD_HOME = SKILL_DIR / "_world"  # the one world of this skill (git-ignored)
@@ -46,7 +46,7 @@ _BLOCK = re.compile(r"<!--\s*prompt:([\w:-]+)\s*-->\s*```[^\n]*\n(.*?)```", re.S
 DEFAULT_FORMAT = {"ratio": "16:9", "keyframe_size": "2560x1440", "resolution": "720p", "short_min": 10,
                   "short_max": 20, "short_options": [10, 15, 20], "segment_seconds": 20, "audio": True}
 _CFG = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.is_file() else {}
-# Model ids come from config.json (image_model_id, video_model_id, audio_model_id); world.json `models` overrides.
+# Model ids come from aigc_config.json (image_model_id, video_model_id, audio_model_id); world.json `models` overrides.
 DEFAULT_MODELS = {"image": _CFG.get("image_model_id", "dola-seedream-5-0-pro-260628"),
                   "video": _CFG.get("video_model_id", "dreamina-seedance-2-5-260628"),
                   "speech": _CFG.get("audio_model_id", "seed-audio-1.0"),
@@ -134,6 +134,9 @@ def pop_world_arg(argv):
 class World:
     def __init__(self, root=None):
         self.root = resolve_world(root) if root else find_world()
+        # every model call made from here on is logged in the world's token ledger (scripts/llm_usage.py)
+        os.environ.setdefault("MY_WORLD_USAGE_LOG", str(self.root / "_reference" / "log" / "llm_usage.jsonl"))
+        os.environ.setdefault("MY_WORLD_ACTIVITY", " ".join([Path(sys.argv[0]).name] + sys.argv[1:])[:200])
         mf = self.root / "world.json"
         if not mf.is_file():
             sys.exit(f"DEPENDENCY ERROR [WORLD]: {mf} is missing.")
@@ -240,6 +243,25 @@ def _python():
     return errs
 
 
+def world_id(world):
+    """The world's permanent random id (world.json `world_id`), created and saved on first use. It makes the publish
+    path unique, so worlds made in other sessions or on other machines never overwrite each other."""
+    if not world.cfg.get("world_id"):
+        import uuid
+        mf = world.root / "world.json"
+        cfg = json.loads(mf.read_text(encoding="utf-8"))
+        cfg["world_id"] = uuid.uuid4().hex[:12]
+        mf.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        world.cfg["world_id"] = cfg["world_id"]
+    return world.cfg["world_id"]
+
+
+def publish_slug(world):
+    """`<name>-<8 chars of world_id>`, e.g. my-world-3f9a1c2b (world.json `publish.slug` once published)."""
+    base = re.sub(r"[^a-z0-9]+", "-", world.name.lower()).strip("-")[:40] or "world"
+    return f"{base}-{world_id(world)[:8]}"
+
+
 def _read_json(path):
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -341,7 +363,7 @@ _OVERRIDES = []  # stack of per-call settings; a module global so worker threads
 
 @contextmanager
 def patched_config(overrides):
-    """Settings (model, size, ratio…) for every generation call inside the block, on top of config.json."""
+    """Settings (model, size, ratio…) for every generation call inside the block, on top of aigc_config.json."""
     _OVERRIDES.append(dict(overrides))
     try:
         yield

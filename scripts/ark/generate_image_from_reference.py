@@ -77,7 +77,7 @@ def main() -> int:
         image_data_urls = [file_to_data_url(p) for p in image_paths]
         image = image_data_urls[0] if len(image_data_urls) == 1 else image_data_urls
 
-        print(f"Generating...", file=sys.stderr)
+        print("Generating...", file=sys.stderr)
         image_url, usage = generate_image(service, prompt, image, model_id, size, watermark)
 
         dl_s    = download_file(image_url, output_path)

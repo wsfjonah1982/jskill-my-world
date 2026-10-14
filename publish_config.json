@@ -1,0 +1,7 @@
+{
+  "deploy_endpoint": "tos-ap-southeast-1.bytepluses.com",
+  "deploy_region": "ap-southeast-1",
+  "deploy_bucket": "portobuild",
+  "deploy_prefix_template": "world/{slug}",
+  "local_publish_dir": ""
+}

@@ -29,6 +29,7 @@
     }
   ],
   "groups": [],
+  "approved": {},
   "world_cards": [
     {"title": "Where", "text": "The place in one or two sentences."},
     {"title": "Look and rules", "text": "Palette, light and the rules every picture keeps."}

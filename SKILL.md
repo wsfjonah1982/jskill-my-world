@@ -74,13 +74,20 @@ Scripts are in `scripts/` (run with `python <skill>/scripts/<name>.py …`; they
 | `world_images.py sheet\|set\|prop\|group\|height …` | draws the reference pictures from the canon (`--dry-run` = prompts only) |
 | `voices.py [script.json] design\|dialogue\|page\|all` | character voices (Seed Audio) → `_asset/voices/` |
 | `build_overview.py` | `world.html` + nav bars on every page |
+| `publish_world.py [--dry-run] [--slug S] [--overwrite]` | uploads `world.html` and only the files it links (never raw input, logs, archive) to TOS, public-read, under a path unique to this world (`<name>-<world_id>`, e.g. `world/my-world-3f9a1c2b/`); refuses to overwrite another world's upload; prints the URL |
+| `evaluate_world.py [template]` | checklist, quality, breadth and approvals → `world.md` Evaluation section + `world.html` (rebuilt) |
+| `llm_usage.py [report\|sync\|backfill]` | token and call ledger of every model call (generation + the agent) → `_reference/log/usage.json`, Usage section of `world.html` |
 
 Generation needs no other skill: `scripts/ark/` holds the Seedream (images) and Seedance (videos) scripts, the
-skill's `config.json` the endpoints and default model ids (`image_model_id`, `video_model_id`,
+skill's `aigc_config.json` (the AIGC model config) the endpoints, default model ids and generation settings (`image_model_id`, `video_model_id`,
 `audio_model_id`; a world's `models` overrides them). Keys go in the
 skill's `credential.json` (git-ignored; template `credential_tmp.json`): `model_ark_key` for images and videos,
-`speech_model_api_key` for voices (Seed Audio; the ARK key is rejected there). Env vars of the same names win. Run
-`worldlib.py check` first; **if it prints `DEPENDENCY ERROR`, stop and give the user the message verbatim**, do not
+`speech_model_api_key` for voices (Seed Audio; the ARK key is rejected there). Env vars of the same names win.
+`publish_config.json` holds the object-storage settings (BytePlus TOS) for publishing the world's pages and assets:
+`deploy_endpoint`, `deploy_region`, `deploy_bucket`, `deploy_prefix_template` (e.g. `world/{slug}`),
+`local_publish_dir`. The TOS access keys never go there: they belong in `credential.json` (`tos_access_key_id`,
+`tos_secret_access_key`).
+Run `worldlib.py check` first; **if it prints `DEPENDENCY ERROR`, stop and give the user the message verbatim**, do not
 work around it.
 
 ## Prerequisites: check them before any work starts
@@ -106,7 +113,8 @@ ask them to put it in the file (or the env var of the same name) themselves.
   if `worldlib.py inputs` finds none or several.
 - **The cast:** each character's name, species and age, looks (hair/fur, eyes, clothes, colours), personality, how
   they talk, and **real sizes as numbers** (height in cm; shoulder height for animals).
-- **The world:** place and era, the home base, and 3–6 other locations.
+- **The world:** place and era, the home base, and the other locations: **at least 9 in all** (full marks at 30).
+- **The cast size:** **at least 3 characters** (full marks at 8).
 - **The art style** (e.g. 3D Pixar-like cartoon).
 - **The format:** aspect ratio, short-clip and long-take lengths, audio or not (music, or conversation only).
 - **Languages:** what each character speaks, and any accent or dialect rule.
@@ -139,12 +147,12 @@ pictures and height chart, then the voices.
    the home base first and, once approved, list it in world.json `style_refs`). Props only when recurring:
    `world_images.py prop <key>`. Show and approve.
 6. **Group pictures:** `world_images.py height` (from `height_cm` in world.json; check the scale, models draw small
-   characters too big) and any group scenes (`group <name> --location <key>` with a `group:<name>` block or
-   `--scene "…"`). Add the approved ones to world.json `groups`.
+   characters too big) and **one group scene per location** (`group <name> --location <key>` with a
+   `group:<name>` block or `--scene "…"`). Add each to world.json `groups` with its `location` key.
 7. **Voices** (if the format has audio): write `_reference/voices/samples.json` (one sample line per character in
    their own voice, plus a short `turns` dialogue), `voices.py design`, then `voices.py dialogue` and `voices.py page`.
    The user listens on `_reference/voices/voices.html` and approves; delete a clip to redesign it.
-8. **Overview:** `build_overview.py`, then open `world.html` for the user. Update world.md (session log,
+8. **Overview and evaluation:** `evaluate_world.py` (see Evaluating the world; it rebuilds `world.html`), then open `world.html` for the user. Update world.md (session log,
    pending tasks, open questions).
 
 Pictures are cheap previews: render them without asking, then present them. Never redraw an approved asset without
@@ -153,9 +161,64 @@ the user asking; an old version is archived automatically when one is redrawn.
 ## Changing an existing world (also: adding a "new" cast or world to it)
 
 - Change the canon first (the block and the prose around it), then redraw what depends on it (sheet, set, prop),
-  then `build_overview.py`. A new location = a new `#### Title (`key`)` section with its `location:<key>` block +
+  then `evaluate_world.py` (which rebuilds `world.html`). A new location = a new `#### Title (`key`)` section with its `location:<key>` block +
   `world_images.py set <key>`. Never patch a description inside one story's prompt.
 - Decisions the user makes ("keep the pictures as they are", "no music") go into the canon and world.md right away.
+
+## Evaluating the world (after every build or change)
+
+Every time the world changes (canon, a sheet, set, prop, group picture or voice), finish with an evaluation and
+give the user its result in a few lines: the overall score, the band, and the top issues.
+
+1. **Record approvals first.** When the user approves an asset ("ok", "looks good", "use this one"), add it to
+   world.json `approved` with today's date. Never mark something approved that the user did not approve.
+2. **Look and listen before scoring.** View every picture that changed, and the ones it should match (sheets ↔
+   group pictures ↔ height chart, set ↔ group scene); a contact sheet of all assets is the quickest way. Read the
+   voice transcripts in `voices_meta.json`.
+3. **Score** `_reference/evaluation/review.json` (`evaluate_world.py template` writes the skeleton, keeping old
+   scores): each criterion 1–5 with a note naming the evidence. Score honestly, never your own work up: 5 only when
+   you checked and found no flaw; what you could not check yourself (how a voice sounds, an accent) is 3 at most
+   until the user approves it. List open problems in `issues`.
+4. **Run** `evaluate_world.py`: it adds the measured completeness (canon blocks, sheets, sets, props, group
+   pictures, height chart, voices) and technical checks (resolution, 16:9, clean sheet backgrounds, voice length),
+   counts the approvals, writes the Evaluation section in `world.md` and rebuilds `world.html`.
+
+**The scoring rules are a reusable template:** the numbers below live in `templates/scoring.json` (a world can
+override it with its own `scoring.json`), the method, formulas and colour coding (green Pass, amber Check, red Fail)
+in `references/scoring.md`. **Every new project uses the default template as it is**; write a world's own `scoring.json` only when the
+user asks to customize the scoring. Change the template, not the code; copy both to reuse the scoring in another project.
+
+**Breadth** rewards a richer world, in three parts:
+- **Characters** with a sheet (weight 40): **minimum 3**, full marks at **8**; part = n / 8.
+- **Locations** with a set (weight 35): **minimum 9**, full marks at **30**; part = n / 30.
+- **Group pictures** (weight 25): **one per location**; part = locations with a group picture (world.json `groups[]`
+  `location`) / locations. The height chart does not count.
+Below a minimum, or a location without a group picture, is also a missing completeness item. When the user wants a
+higher score, suggest what would add the most: a group scene for an uncovered location, a character, a location.
+
+The result: overall = 50% quality + 50% breadth (only once every quality criterion is scored); bands 90+ excellent,
+75+ good, 60+ fair, below 60 not ready. Completeness is a checklist, not scored: **any missing checklist item or
+unapproved asset means "not ready for stories"**, whatever the score.
+A review older than the last change is flagged stale: re-review before reporting.
+
+## Model usage: every LLM call is logged
+
+Token consumption is tracked for everything the skill does with a model:
+- **Generation** (Seedream images and sheets, Seedance videos, Seed Audio voices): every call, succeeded or failed,
+  is appended to `<world>/_reference/log/llm_usage.jsonl` with time, activity (the command that ran), kind, model,
+  output, status, tokens in / out / total (from the API's `usage`), duration and error. Voices report no tokens, so
+  their audio seconds and prompt length are logged. This happens automatically in `scripts/ark/ark_service.py` and
+  `voices.py` (any script that opens the world through `worldlib.World` sets the ledger path), including calls the
+  world-stories skill makes through worldlib.
+- **The agent's own LLM use** (Claude Code): `llm_usage.py sync` reads the Claude Code session transcripts of the
+  skill folder and writes per-session input, cache-write, cache-read and output tokens to
+  `_reference/log/agent_usage.json`. It is rewritten on every sync, so nothing is counted twice.
+- **Report:** `llm_usage.py` (also run by `evaluate_world.py`) syncs the agent usage, writes
+  `_reference/log/usage.json` and prints totals per model; `world.html` shows them in its Usage section. Report the
+  totals to the user after any batch of generation.
+- Any new script that calls a model must log through `llm_usage.record(...)`; never call a model API without it.
+  `llm_usage.py backfill` imports older per-call `.log` records and `voices.log` once (it skips what is already in).
+- The ledger lives under `_reference/log/`, which is never published; only the totals appear on the page.
 
 ## Lessons that apply to every world
 

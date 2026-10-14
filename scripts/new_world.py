@@ -64,6 +64,9 @@ if __name__ == "__main__":
         dst.write_text((TEMPLATES / t).read_text(encoding="utf-8").replace("{{NAME}}", name)
                        .replace("{{DATE}}", date.today().isoformat()), encoding="utf-8")
         print(f"wrote {dst}")
+    sys.path.insert(0, str(SKILL_DIR / "scripts"))
+    import worldlib
+    print(f"world_id {worldlib.world_id(worldlib.World(root))} (makes the publish path unique)")
     if src:
         src = Path(src)
         if not src.is_dir():

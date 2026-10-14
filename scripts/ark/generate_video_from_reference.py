@@ -59,7 +59,7 @@ def main() -> int:
         base_url         = config["maas_api_endpoint"]
         poll_interval_s  = config.get("poll_interval_seconds", 15)
         max_polls        = config.get("max_polls", 120)
-        # Output ratio follows the first-frame image for image-to-video — config.json's
+        # Output ratio follows the first-frame image for image-to-video — aigc_config.json's
         # video_ratio does not apply here (it does for generate_video_from_text.py).
 
         log.update({
@@ -87,7 +87,7 @@ def main() -> int:
                 {"type": "text", "text": prompt},
             ],
             # Output ratio follows the first-frame image for image-to-video — the API rejects
-            # an explicit ratio here, so config.json's video_ratio does not apply to this script.
+            # an explicit ratio here, so aigc_config.json's video_ratio does not apply to this script.
             duration_seconds=duration_seconds, ratio=None, resolution=resolution,
             generate_audio=generate_audio, watermark=watermark,
         )

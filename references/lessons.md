@@ -38,3 +38,7 @@
   a wide room with two sofas when the set was reference 4 of 5). `world_images.py group` now passes the location as
   image 1, the base picture ("keep its camera viewpoint and furniture positions, only add the characters"); also
   place the characters on furniture that is in the set, in the `group:<name>` block.
+- **A small animal near the camera draws too big,** and writing "SMALL" or a size comparison into the scene does not
+  fix it (the bus ride: Butter, sitting in the aisle, reached the seated girl's shoulder, twice). Change the pose
+  instead: lying down, or further from the camera than the people. Saying "keep the exact camera viewpoint of image
+  1, seen from the same distance" also stops the camera moving in closer.

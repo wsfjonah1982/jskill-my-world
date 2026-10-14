@@ -1,7 +1,7 @@
 """Ark REST API clients for my-world: Seedream image generation and Seedance video generation.
 
 Copied from the video-workflow skill (scripts/ark_service.py) so my-world runs on its own: plain HTTP calls via
-`requests`. Settings come from the skill's config.json plus the per-call MY_WORLD_ARK_OVERRIDES env var (set by
+`requests`. Settings come from the skill's aigc_config.json plus the per-call MY_WORLD_ARK_OVERRIDES env var (set by
 worldlib); the API key from env `model_ark_key`, else the skill's credential.json.
 """
 import base64
@@ -15,9 +15,12 @@ from pathlib import Path
 
 import requests
 
-BASE_DIR           = Path(__file__).resolve().parents[2]  # my-world skill root — credential.json/config.json live here
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import llm_usage  # noqa: E402  the token ledger
+
+BASE_DIR           = Path(__file__).resolve().parents[2]  # my-world skill root — credential.json/aigc_config.json live here
 CREDENTIAL_PATH    = BASE_DIR / "credential.json"
-CONFIG_PATH        = BASE_DIR / "config.json"
+CONFIG_PATH        = BASE_DIR / "aigc_config.json"
 LOG_DIR            = BASE_DIR / "_world" / "_reference" / "log"  # default only; worldlib always passes --log-dir
 PROMPT_LIBRARY_DIR = Path(__file__).resolve().parent
 OVERRIDES_ENV      = "MY_WORLD_ARK_OVERRIDES"  # JSON settings for one call (model, size, ratio…), set by worldlib
@@ -40,7 +43,7 @@ def read_json(path: Path) -> dict:
 
 
 def load_config() -> dict:
-    """config.json, with the per-call settings from the MY_WORLD_ARK_OVERRIDES env var on top."""
+    """aigc_config.json, with the per-call settings from the MY_WORLD_ARK_OVERRIDES env var on top."""
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(f"Config file not found: {CONFIG_PATH}")
     cfg = read_json(CONFIG_PATH)
@@ -65,10 +68,17 @@ def load_api_key() -> str:
 
 
 def write_log(log_path: Path, data: dict) -> None:
+    """The per-call .log record, and one row in the world's token ledger (scripts/llm_usage.py)."""
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(data, ensure_ascii=False) + "\n")
+    script = Path(sys.argv[0]).stem
+    kind = "video" if "video" in script else "sheet" if "sheet" in script else "image"
+    llm_usage.record(kind, data.get("model"), data.get("status", "unknown"), output=data.get("output"),
+                     tokens_in=data.get("tokens_in"), tokens_out=data.get("tokens_out"),
+                     tokens_total=data.get("tokens_total"), duration_s=data.get("total_s"), error=data.get("error"),
+                     log_timestamp=data.get("timestamp"), task_id=data.get("task_id"))
 
 
 def read_text_file(path: Path, label: str) -> str:
