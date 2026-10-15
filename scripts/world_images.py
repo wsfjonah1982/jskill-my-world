@@ -1,4 +1,4 @@
-"""Draw the reference pictures of a world: character sheets, location sets, props, group pictures, height line-up.
+"""Draw the reference pictures of a world: character sheets, scene sets, props, group pictures, height line-up.
 
 Every prompt is built from the world's canon blocks (Identities.md / Setting.md), so the pictures and every later
 keyframe and video agree. An existing picture is moved to _reference/archive/<kind>/ before it is redrawn.
@@ -6,12 +6,13 @@ Prompts and logs go to _reference/<kind>/prompt|log/; source photos are read fro
 
 Usage:  python world_images.py sheet <char> [...]          canon `sheet:<char>` → _asset/<sheet path in world.json>
                                                            (photos in _reference/characters/refs/<char>*.jpg|png anchor it)
-        python world_images.py set <location> [...] [--refs img ...]
-                                                           canon `location:<key>` → _asset/settings/<key>.png
-                                                           (_reference/settings/refs/<key>_photo.jpg sets the layout)
+        python world_images.py scene <key> [...] [--refs img ...]     (`set` is the same)
+                                                           canon `scene:<key>` → _asset/scenes/<key>.png
+                                                           (_reference/scenes/refs/<key>_photo.jpg sets the layout)
         python world_images.py prop <prop> [...]           canon `prop:<key>` → _asset/props/<key>.png
                                                            (_reference/props/refs/<key>_photo.jpg anchors the look)
-        python world_images.py group <name> [--location key] [--cast a b] [--scene "text"]
+        python world_images.py group <name> [--scene key] [--cast a b] [--action "text"]
+                                                           (--scene defaults to the group's `scene` in world.json)
                                                            canon `group:<name>` (or --scene) → _asset/<name>.png
         python world_images.py height                      line-up at true heights → _asset/height_chart.png
         add --dry-run to write the prompts only, --world DIR to pick the world.
@@ -54,12 +55,12 @@ class Pictures:
         return sorted(p for p in refs.glob(f"{key}*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"))
 
     def style_refs(self, exclude=None):
-        """Pictures that carry the world's rendering style: world.json `style_refs`, else the first location set,
+        """Pictures that carry the world's rendering style: world.json `style_refs`, else the first scene set,
         else the first character sheet."""
         w = self.w
         refs = [w.p(r) for r in w.cfg.get("style_refs", []) if w.p(r).is_file()]
         if not refs:
-            sets = [w.location_image(k) for k in w.locations() if k != exclude and w.location_image(k).is_file()]
+            sets = [w.scene_image(k) for k in w.scenes() if k != exclude and w.scene_image(k).is_file()]
             refs = sets[:1] or [w.sheet(k) for k in w.chars if w.sheet(k).is_file()][:1]
         return refs
 
@@ -80,7 +81,7 @@ class Pictures:
             return key, wl.gen_sheet(idea, w.cfg.get("sheet_style", w.get("style")), self._photos("characters", key),
                                      out, base / "log")
 
-    # ----- location sets
+    # ----- scene sets
     def set_prompt(self, key, photo, custom_refs):
         w = self.w
         notes, n = [], 1
@@ -93,26 +94,26 @@ class Pictures:
                      "come from our animated film: match only the rendering style, colour palette, light and level of "
                      "detail; do not copy their place, layout, objects or characters.")
         return (f"{w.get('style')}. {w.ratio_words}, full-bleed, an empty film set with no people and no animals, "
-                "used as the location reference for this place.\n" + " ".join(notes) + "\n"
-                f"The place: {w.get('location:' + key)}\nThe world: {w.get('world')}\n"
+                "used as the scene reference for this place.\n" + " ".join(notes) + "\n"
+                f"The place: {w.get('scene:' + key)}\nThe world: {w.get('world')}\n"
                 "Eye-level camera at a natural standing height, a wide establishing view with open space in the middle "
                 "where characters can later stand.\nno text, no readable signs, no numbers, no logos, no watermark, "
                 "no people, no animals, no characters, no split panels.\n")
 
     def set(self, key, custom=None):
         w = self.w
-        if key not in w.locations():
-            return key, f"unknown location; known: {', '.join(w.locations())}"
-        base = self._dirs("settings")
-        photos = [p for p in self._photos("settings", key) if p.stem.endswith("_photo")][:1]
+        if key not in w.scenes():
+            return key, f"unknown scene; known: {', '.join(w.scenes())}"
+        base = self._dirs("scenes")
+        photos = [p for p in self._photos("scenes", key) if p.stem.endswith("_photo")][:1]
         refs = custom or self.style_refs(exclude=key)
         pf = base / "prompt" / f"{key}.txt"
         pf.write_text(self.set_prompt(key, photos[0] if photos else None, len(refs)), encoding="utf-8")
         if DRY:
             return key, f"prompt written: {pf}"
-        out = w.location_image(key)
+        out = w.root / "_asset" / "scenes" / f"{key}.png"
         out.parent.mkdir(parents=True, exist_ok=True)
-        old = wl.archive(out, w, "settings")
+        old = wl.archive(out, w, "scenes")
         refs = [old if old and Path(r).resolve() == out.resolve() else r for r in refs]  # redrawing the style ref itself
         return key, wl.gen_image(photos + refs, pf, out, base / "log")
 
@@ -137,14 +138,17 @@ class Pictures:
         return key, wl.gen_image(photos + style, pf, out, base / "log")
 
     # ----- group pictures
-    def group(self, name, location=None, cast=None, scene=None):
+    def group(self, name, scene_key=None, cast=None, action=None):
         w = self.w
         cast = cast or w.default_cast()
         base = self._dirs("groups")
         refs, notes = [], []
-        if location:  # first, as the base picture: later references only add the characters (else the room drifts)
-            refs.append(w.location_image(location))
-            notes.append("image 1 is the location and the base of the picture: keep its exact camera viewpoint, room "
+        if scene_key is None:  # the group's scene from world.json groups[]
+            g = next((g for g in w.cfg.get("groups", []) if Path(g.get("path", "")).stem == name), {})
+            scene_key = g.get("scene") or g.get("location")
+        if scene_key:  # first, as the base picture: later references only add the characters (else the room drifts)
+            refs.append(w.scene_image(scene_key))
+            notes.append("image 1 is the scene and the base of the picture: keep its exact camera viewpoint, room "
                          "shape, furniture, furniture positions, colours and light, and only add the characters into it")
         for c in cast:
             refs.append(w.sheet(c))
@@ -153,11 +157,11 @@ class Pictures:
         if hc and name != "height_chart" and len(cast) > 1:
             refs.append(hc)
             notes.append(f"image {len(refs)} is the height chart: copy its true relative sizes")
-        scene = scene or w.get("group:" + name)
+        action = action or w.get("group:" + name)
         pf = base / "prompt" / f"{name}.txt"
         pf.write_text(f"{w.get('style')}. {w.ratio_words} picture, full-bleed.\nReferences: {'; '.join(notes)}.\n"
-                      f"Scene: {scene}\nCharacters: {w.get('characters')}\n"
-                      + (f"Setting: {w.get('location:' + location)}\n" if location else "")
+                      f"Scene: {action}\nCharacters: {w.get('characters')}\n"
+                      + (f"Setting: {w.get('scene:' + scene_key)}\n" if scene_key else "")
                       + f"{w.one_each(cast).capitalize()}. {w.neg_image}\n", encoding="utf-8")
         if DRY:
             return name, f"prompt written: {pf}"
@@ -177,7 +181,7 @@ class Pictures:
         scene = ("A height comparison line-up, all characters standing side by side on one flat floor line in front of "
                  f"a plain pale backdrop, full bodies visible, drawn exactly to scale: {desc}. "
                  "No ruler, no numbers, no text (the ruler is added later).")
-        return self.group("height_chart", cast=[c["key"] for c in lineup], scene=scene)
+        return self.group("height_chart", scene_key="", cast=[c["key"] for c in lineup], action=scene)
 
 
 if __name__ == "__main__":
@@ -191,17 +195,18 @@ if __name__ == "__main__":
     kind, args = args[0], args[1:]
     if kind == "sheet":
         jobs = [lambda k=k: pics.sheet(k) for k in args or list(world.chars)]
-    elif kind == "set":
+    elif kind in ("scene", "set"):
         refs, args = _opt(args, "--refs", None)
         custom = [world.p(r) for r in refs] if refs else None
-        jobs = [lambda k=k: pics.set(k, custom) for k in args or world.locations()]
+        jobs = [lambda k=k: pics.set(k, custom) for k in args or world.scenes()]
     elif kind == "prop":
-        jobs = [lambda k=k: pics.prop(k) for k in args]
+        jobs = [lambda k=k: pics.prop(k) for k in args or world.props()]
     elif kind == "group":
-        loc, args = _opt(args, "--location")
+        loc, args = _opt(args, "--scene")
+        old, args = _opt(args, "--location")  # older name of --scene
         cast, args = _opt(args, "--cast", None)
-        scene, args = _opt(args, "--scene")
-        jobs = [lambda n=n: pics.group(n, loc, cast, scene) for n in args]
+        action, args = _opt(args, "--action")
+        jobs = [lambda n=n: pics.group(n, loc or old, cast, action) for n in args]
     elif kind == "height":
         jobs = [pics.height]
     else:

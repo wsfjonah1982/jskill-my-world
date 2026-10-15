@@ -3,8 +3,8 @@
 A "My World" project: characters, places and voices that every story is built on.
 
 - **Start page:** [`world.html`](world.html) (rebuild: my-world `build_overview.py`).
-- **Canon:** [`Identities.md`](Identities.md) (characters, voices) and [`Setting.md`](Setting.md) (world, locations,
-  props). Every keyframe and video prompt takes its style, characters, location and props from their
+- **Canon:** [`Identities.md`](Identities.md) (characters, voices) and [`Setting.md`](Setting.md) (world, scenes,
+  props). Every keyframe and video prompt takes its style, characters, scene and props from their
   `<!-- prompt:... -->` blocks. Change a character or a place there, never in a single prompt.
 - **Manifest:** [`world.json`](world.json): names, format (ratio, sizes, durations), characters, group pictures.
 - **Stories:** made with the world-stories skill, one folder per topic in `_tasks/<date>_<slug>/`.

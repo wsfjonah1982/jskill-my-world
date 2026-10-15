@@ -1,7 +1,7 @@
 """Shared library for "My World" projects (used by the my-world and world-stories skills).
 
 A world is a folder with a `world.json` manifest and two canon files, `Identities.md` (characters, voices) and
-`Setting.md` (world, locations, props). Canon prompt blocks — a `<!-- prompt:<key> -->` marker followed by a fenced
+`Setting.md` (world, scenes, props). Canon prompt blocks — a `<!-- prompt:<key> -->` marker followed by a fenced
 code block — are pasted word for word into every image and video prompt, so every render of the world stays
 consistent. Change a character or a place there, never in a single prompt.
 
@@ -11,7 +11,7 @@ in the MY_WORLD_ARK_OVERRIDES env var. Keys live in the skill's credential.json:
 
 CLI:  python worldlib.py canon [key] [--world DIR]   list every canon block, or print one
       python worldlib.py check [group ...] [--world DIR]   python | image | video | ffmpeg | voice | world
-      python worldlib.py info [--world DIR]   the world's characters, locations and format
+      python worldlib.py info [--world DIR]   the world's characters, scenes and format
       python worldlib.py inputs   the candidate folders of the user's raw material (MY_WORLD_INPUT, _input, upload, mnt, input, in)
       python worldlib.py inspect <image> [sheet|set|any]   can a raw picture be used directly as an asset?
 The world folder is --world, else the env var WORLD_DIR, else the nearest folder upwards from the current directory
@@ -76,7 +76,7 @@ def find_inputs():
 
 def inspect_image(path, kind="sheet"):
     """Measurable conditions for using a raw picture directly as an asset. Returns (facts, problems).
-    kind: sheet (character three-view on a plain background), set (empty location), any."""
+    kind: sheet (character three-view on a plain background), set (empty scene), any."""
     from PIL import Image, ImageFilter, ImageStat
     im = Image.open(path)
     w, h = im.size
@@ -206,6 +206,10 @@ class World:
                     sys.exit(f"DEPENDENCY ERROR [CANON]: {path} is missing; it is the canonical source for every render.")
                 for key, text in _BLOCK.findall(path.read_text(encoding="utf-8")):
                     out[key] = " ".join(text.split())
+            for key in list(out):  # scene:<key> is the name; location:<key> (older worlds and callers) is an alias
+                kind, _, rest = key.partition(":")
+                if kind in ("scene", "location") and rest:
+                    out.setdefault(("location:" if kind == "scene" else "scene:") + rest, out[key])
             self._blocks = out
         return self._blocks
 
@@ -218,11 +222,20 @@ class World:
         sys.exit(f"DEPENDENCY ERROR [CANON]: no '<!-- prompt:{key} -->' block in {' or '.join(CANON_FILES)} "
                  f"of {self.root}. Known: {', '.join(sorted(b))}")
 
-    def locations(self):
-        return sorted(k.split(":", 1)[1] for k in self.blocks() if k.startswith("location:"))
+    def scenes(self):
+        return sorted(k.split(":", 1)[1] for k in self.blocks() if k.startswith("scene:"))
 
-    def location_image(self, key):
-        return self.root / "_asset" / "settings" / f"{key}.png"
+    def scene_image(self, key):
+        p = self.root / "_asset" / "scenes" / f"{key}.png"
+        old = self.root / "_asset" / "settings" / f"{key}.png"  # older worlds
+        return old if not p.is_file() and old.is_file() else p
+
+    def props(self):
+        """Recurring props with their own `prop:<key>` block."""
+        return sorted(k.split(":", 1)[1] for k in self.blocks() if k.startswith("prop:"))
+
+    # older names, kept for callers such as world-stories
+    locations, location_image = scenes, scene_image
 
     def prop_image(self, key):
         return self.root / "_asset" / "props" / f"{key}.png"
@@ -322,8 +335,8 @@ def _world(world):
     need = list(REQUIRED_BLOCKS) + (["voice"] if world.fmt["audio"] else [])
     errs += [("CANON", f"canon block '<!-- prompt:{k} -->' is missing.") for k in need if k not in blocks]
     errs += [("CANON", f"canon block '{k}' still has a REPLACE placeholder.") for k, v in blocks.items() if "REPLACE" in v]
-    if not world.locations():
-        errs.append(("CANON", "Setting.md has no '<!-- prompt:location:<key> -->' block."))
+    if not world.scenes():
+        errs.append(("CANON", "Setting.md has no '<!-- prompt:scene:<key> -->' block."))
     for k in world.chars:
         if not world.sheet(k).is_file():
             errs.append(("ASSET", f"Character sheet of '{k}' is missing: {world.sheet(k)} (my-world: world_images.py sheet {k})."))
@@ -459,8 +472,10 @@ if __name__ == "__main__":
         print(f"World: {w.name}  ({w.root})")
         for k, c in w.chars.items():
             print(f"  character {k}: {w.char_label(k)}  sheet {'ok' if w.sheet(k).is_file() else 'MISSING'}")
-        for k in w.locations():
-            print(f"  location {k}: picture {'ok' if w.location_image(k).is_file() else 'MISSING'}")
+        for k in w.scenes():
+            print(f"  scene {k}: picture {'ok' if w.scene_image(k).is_file() else 'MISSING'}")
+        for k in w.props():
+            print(f"  prop {k}: picture {'ok' if w.prop_image(k).is_file() else 'MISSING'}")
         print(f"  format: {w.fmt}")
     elif cmd == "inputs":
         found = find_inputs()

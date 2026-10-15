@@ -7,10 +7,10 @@ Four parts (rules and numbers in the scoring template, templates/scoring.json; m
                 the rubric in the scoring template (templates/scoring.json), in _reference/evaluation/review.json (`template` writes a skeleton).
   approval      the user's approvals, from world.json `approved` {"<asset path>": "YYYY-MM-DD"}; an approval no longer
                 counts once the asset is changed after that date. Any unapproved asset means: not ready for stories.
-  breadth       how rich the world is (parts in the scoring template): characters with a sheet (minimum 3, full marks at 8), locations
-                with a set (minimum 9, full marks at 30), each part = n / full; and group pictures, one per location
-                (part = locations with a group picture / locations). The minimums and a group picture for every
-                location are also completeness items.
+  breadth       how rich the world is (parts in the scoring template): the three factors of a world, characters
+                with a sheet, scenes with a set and props with a picture (each part = n / full), plus group pictures,
+                one per scene (part = scenes with a group picture / scenes). The minimums and a group picture for
+                every scene are also completeness items.
 Score = 50% quality + 50% breadth, given only when every quality criterion is scored. Any missing completeness
 item or unapproved asset means: not ready for stories, whatever the score. A review older than the newest
 canon or asset change is flagged as stale. Score only what was checked: what the reviewer could not verify (e.g. how
@@ -43,8 +43,10 @@ def load_scoring(root):
     SCORING_FILE = next(p for p in (root / "scoring.json", SCORING_TEMPLATE) if p.is_file())
     sc = json.loads(SCORING_FILE.read_text(encoding="utf-8"))
     QUALITY = [(c["id"], c["label"], c["weight"], c["means_5"]) for c in sc["quality"]["criteria"]]
-    BREADTH = {p["id"]: (p["weight"], None if p["minimum"] == "per_location" else p["minimum"],
-                         None if p["full"] == "per_location" else p["full"], p["label"]) for p in sc["breadth"]["parts"]}
+    per = ("per_scene", "per_location")  # one per scene ("per_location": older templates)
+    BREADTH = {{"locations": "scenes"}.get(p["id"], p["id"]): (p["weight"], None if p["minimum"] in per else p["minimum"],
+                                                               None if p["full"] in per else p["full"], p["label"])
+               for p in sc["breadth"]["parts"]}
     WEIGHTS = sc["weights"]
     BANDS = [tuple(b) for b in sc["bands"]]
     STATUS = {k: v for k, v in sc["status"].items() if not k.startswith("_")}
@@ -107,16 +109,17 @@ class Evaluation:
                 if d and d > MAX_SOLO_VOICE_S:
                     self.problems.append(f"{wl.rel(clip, w.root)}: {d:.1f}s, over {MAX_SOLO_VOICE_S}s (too long to "
                                          "be a voice reference)")
-        for k in w.locations():
-            self.need("Locations", f"{k}: set picture", self.picture(w.location_image(k), "set"))
-        self.need("Locations", "style_refs set in world.json", w.cfg.get("style_refs"))
-        for k in sorted(x.split(":", 1)[1] for x in b if x.startswith("prop:")):
+        for k in w.scenes():
+            self.need("Scenes", f"{k}: set picture", self.picture(w.scene_image(k), "set"))
+        self.need("Scenes", "style_refs set in world.json", w.cfg.get("style_refs"))
+        for k in w.props():
             self.need("Props", f"{k}: prop picture", self.picture(w.prop_image(k), "any"))
-        lo_min, ch_min = BREADTH["locations"][1], BREADTH["characters"][1]
-        self.need("Breadth", f"at least {ch_min} characters", len(w.chars) >= ch_min, f"{len(w.chars)}")
-        self.need("Breadth", f"at least {lo_min} locations", len(w.locations()) >= lo_min, f"{len(w.locations())}")
-        covered = self.group_locations()
-        for k in w.locations():
+        for part, n, what in (("characters", len(w.chars), "characters"), ("scenes", len(w.scenes()), "scenes"),
+                              ("props", len(w.props()), "props with a prop:<key> block")):
+            if part in BREADTH and BREADTH[part][1]:
+                self.need("Breadth", f"at least {BREADTH[part][1]} {what}", n >= BREADTH[part][1], f"{n}")
+        covered = self.group_scenes()
+        for k in w.scenes():
             self.need("Groups", f"{k}: group picture", k in covered)
         if len(w.chars) > 1:
             hc = w.root / w.cfg.get("height_chart", "_asset/height_chart.png")
@@ -177,16 +180,17 @@ class Evaluation:
         missing = [r["label"] for r in rows if not isinstance(r["score"], (int, float))]
         return q, rows, review, stale, missing
 
-    def group_locations(self):
-        """Locations that have at least one existing group picture (world.json groups[] `location`)."""
-        return {g["location"] for g in self.w.cfg.get("groups", [])
-                if g.get("location") and (self.w.root / g["path"]).is_file()}
+    def group_scenes(self):
+        """Scenes that have at least one existing group picture (world.json groups[] `scene`)."""
+        return {g.get("scene") or g.get("location") for g in self.w.cfg.get("groups", [])
+                if (g.get("scene") or g.get("location")) and (self.w.root / g["path"]).is_file()}
 
     def breadth(self):
         w = self.w
-        locs = [k for k in w.locations() if w.location_image(k).is_file()]
-        counts = {"characters": sum(w.sheet(k).is_file() for k in w.chars), "locations": len(locs),
-                  "groups": len(self.group_locations() & set(locs))}
+        locs = [k for k in w.scenes() if w.scene_image(k).is_file()]
+        counts = {"characters": sum(w.sheet(k).is_file() for k in w.chars), "scenes": len(locs),
+                  "props": sum(w.prop_image(k).is_file() for k in w.props()),
+                  "groups": len(self.group_scenes() & set(locs))}
         full = {k: v[2] if v[2] is not None else len(locs) for k, v in BREADTH.items()}
         parts = {k: round(100 * min(counts[k], full[k]) / full[k]) if full[k] else 0 for k in BREADTH}
         score = round(sum(BREADTH[k][0] * parts[k] for k in parts) / sum(v[0] for v in BREADTH.values()))
@@ -222,8 +226,8 @@ class Evaluation:
                   "quality": q, "breadth": br, "breadth_counts": counts,
                   "breadth_parts": parts, "breadth_rows": self.breadth_rows, "breadth_calc": " + ".join(
                       f"{x['weight']}% × {x['score']}" for x in self.breadth_rows) + f" = {br}", "breadth_text": (
-                      f"{counts['characters']} characters, {counts['locations']} locations, group pictures for "
-                      f"{counts['groups']} of {counts['locations']} locations"), "review_date": review.get("date"), "review_stale": stale,
+                      f"{counts['characters']} characters, {counts['scenes']} scenes, {counts['props']} props, "
+                      f"group pictures for {counts['groups']} of {counts['scenes']} scenes"), "review_date": review.get("date"), "review_stale": stale,
                   "unscored": missing, "missing": [f"{a}: {i}" + (f" ({n})" if n else "")
                                                    for a, i, ok, n in self.items if not ok],
                   "problems": self.problems, "criteria": rows, "issues": review.get("issues", []),

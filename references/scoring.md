@@ -34,8 +34,8 @@ like). The reviewer scores 1–5: 1 fails, 3 usable with visible flaws, 5 no fla
 ## Breadth parts
 
 Each part in `breadth.parts` has a `weight`, a `minimum` and `full` marks. Counting stops at `full`. A count below
-`minimum` is also a missing checklist item. `"per_location"` ties a part to another count: one per location, so its
-minimum and full marks equal the number of locations.
+`minimum` is also a missing checklist item. `"per_scene"` ties a part to another count: one per scene, so its
+minimum and full marks equal the number of scenes.
 
 ## Colour coding (`status`)
 

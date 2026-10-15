@@ -11,12 +11,12 @@
 | `format.segment_seconds` | long-take segment length (one video call each; ≤ the video model's maximum) |
 | `format.audio` | `true` = videos have sound (then the `voice` block is required) |
 | `characters[]` | `key` (used in files and story specs), `name`, `label` ("the cat"), `kind` (noun for count rules: "exactly one cat"), `tag` (`<Cat>`, used in video prompts), `pronoun`, `sheet` (path), `colour`, `height_cm` + `height_note`, `facts` (overview bullets), `voice_src`, `main` (false = not in the default cast) |
-| `groups[]` | `{path, caption, location}` group pictures on the overview; `location` is the location key the scene is set in (every location needs one group picture; the height chart has none) |
+| `groups[]` | `{path, caption, scene}` group pictures on the overview; `scene` is the scene key the scene is set in (every scene needs one group picture; the height chart has none) |
 | `height_chart` | path of the height chart (default `_asset/height_chart.png`), passed as a reference whenever 2+ characters are in a frame |
 | `world_id` | permanent random id of the world (created by new_world.py or on first publish). Never change or copy it: it makes the publish path unique and proves which world owns an upload |
 | `publish` | written by publish_world.py: `slug`, `url`, `date` of the last publish |
 | `approved` | the user's approvals: `{"<asset path>": "YYYY-MM-DD"}` (sheets, sets, props, group pictures, height chart, voice clips, dialogue). Add an entry the moment the user approves; an asset changed after that date counts as unapproved again (`evaluate_world.py`) |
-| `style_refs` | pictures that carry the rendering style for new sets and props (default: the first location picture) |
+| `style_refs` | pictures that carry the rendering style for new sets and props (default: the first scene picture) |
 | `world_cards[]` | `{title, text}` cards in the World section of the overview |
 | `voices_lead`, `docs[]`, `workflow_diagram` | overview extras |
 | `no_props_rule` | sentence used when a frame names no props (stops the model drawing every recurring prop) |
@@ -30,7 +30,7 @@
 Marker + fenced block, anywhere in Identities.md or Setting.md:
 
 ````
-<!-- prompt:location:park -->
+<!-- prompt:scene:park -->
 ```text
 Neighbourhood park: a smooth path through wide lawns …
 ```
@@ -49,14 +49,14 @@ Whitespace is collapsed to single spaces. Keep each block to one paragraph.
 | `voice:<char>` | voice design (voices.py) | the voice alone in 2–4 sentences |
 | `audio` | every video prompt | what is heard (e.g. conversation only, no music) |
 | `world` | sets | the place, palette, light, what never appears |
-| `location:<key>` | keyframes, sets, storyboards, videos | the place as one paragraph |
+| `scene:<key>` | keyframes, sets, storyboards, videos | the place as one paragraph |
 | `props` | frames that name props | how each recurring prop looks |
 | `prop:<key>` | prop pictures | one prop in detail |
 | `group:<name>` | group pictures | the scene of that picture |
 
 ## Overview page parsing
 
-- Locations: each `location:<key>` block; title and summary from the `#### Title (`key`)` heading and its bullets in
+- Scenes: each `scene:<key>` block; title and summary from the `#### Title (`key`)` heading and its bullets in
   Setting.md; a `Reference:` line containing "layout only" shows a warning badge.
 - Props: the `## Recurring props` table (`| Prop | Look |`), with `Reference: `_asset/props/x.png`` in the Look
   cell for a picture; any other picture in `_asset/props/` is shown too.

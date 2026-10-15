@@ -1,5 +1,5 @@
 """Build world.html, the "My World" page: characters (sheets, facts, voices), group pictures, the world,
-locations, props, how stories are made, the project documents and, at the bottom, the Tasks list (date and topic,
+scenes, props, how stories are made, the project documents and, at the bottom, the Tasks list (date and topic,
 newest first) linking to each task's pages. Every linked page gets a nav bar back here (pagenav.py).
 
 Everything is read from world.json, Identities.md and Setting.md and the files in _asset/, so re-running it after a
@@ -7,11 +7,12 @@ canon change keeps the page in sync. Media are linked with relative paths (the p
 
 Usage:  python build_overview.py [--world DIR]
 """
+import hashlib
 import html
 import json
 import re
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -19,12 +20,15 @@ import pagenav  # noqa: E402
 import worldlib as wl  # noqa: E402
 
 e = html.escape
-DOCS = [("Identities.md", "Characters and voices"), ("Setting.md", "World, locations, props"),
+DOCS = [("Identities.md", "Characters and voices"), ("Setting.md", "World, scenes, props"),
         ("world.md", "Status and session log"), ("world.json", "Manifest and format")]
 STEPS = [("Topic", "You give a topic or idea"), ("Keyframes", "Designs rendered, you pick 👍/👎 on keyframes.html"),
          ("Script", "Timed shots and dialogue from the canon"),
          ("Short footage", "One clip from an approved keyframe"),
          ("Long take", "Storyboard first, then segments stitched into one film")]
+
+
+FEEDBACK_HTML = '\n<div class=fbbar><span id=fbSum>No feedback yet</span><button type=button id=fbOpen>Feedback</button></div>\n<dialog id=fbdlg><div class=dlghead><b>Your feedback</b><button type=button class=x aria-label=Close onclick="this.closest(\'dialog\').close()">×</button></div>\n<div class=dlgbody><p class=mut>👍 Like approves a design. 👎 Unlike asks for changes: say what in a comment. Your choices are kept in this browser.\nWhen done, click <b>Copy feedback</b> and paste it to the Agent (or <b>Download</b> it and give the file).</p>\n<h4>General comments</h4><textarea id=fbGeneral rows=3 placeholder="Anything about the whole world: style, characters, places, voices…"></textarea>\n<h4>Per design</h4><ul id=fbList></ul>\n<p class=fbbtns><button type=button id=fbCopy>Copy feedback</button> <button type=button id=fbDown>Download</button>\n<button type=button id=fbClear>Clear</button> <span id=fbToast class=mut></span></p></div></dialog>\n<script>\n(()=>{const WID=__WID__,KEY=\'myworld-feedback-\'+WID;let st={items:{},general:\'\'};\ntry{st=Object.assign(st,JSON.parse(localStorage.getItem(KEY)||\'{}\'))}catch(e){}\nconst save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}summary()};\nconst bars=[...document.querySelectorAll(\'.fb\')];\nconst item=b=>{const it=st.items[b.dataset.asset]||(st.items[b.dataset.asset]={label:b.dataset.label,vote:null,comment:\'\'});it.v=b.dataset.v;return it};\nfunction paint(b){const it=st.items[b.dataset.asset]||{},old=!!(it.v&&b.dataset.v&&it.v!==b.dataset.v),v=old?null:it.vote||(b.dataset.approved&&!(\'vote\' in it)?\'like\':null);\n b.querySelector(\'.fb-old\').hidden=!(old&&(it.vote||it.comment));\n b.querySelector(\'.fb-like\').classList.toggle(\'on\',v===\'like\');b.querySelector(\'.fb-unlike\').classList.toggle(\'on\',v===\'unlike\');\n const t=b.querySelector(\'.fb-text\');if(it.comment){t.hidden=false;t.value=it.comment}\n b.querySelector(\'.fb-cm\').classList.toggle(\'on\',!!it.comment)}\nbars.forEach(b=>{paint(b);\n b.querySelector(\'.fb-like\').onclick=()=>{const it=item(b);it.vote=it.vote===\'like\'?null:\'like\';paint(b);save()};\n b.querySelector(\'.fb-unlike\').onclick=()=>{const it=item(b);it.vote=it.vote===\'unlike\'?null:\'unlike\';paint(b);\n  const t=b.querySelector(\'.fb-text\');if(it.vote===\'unlike\'){t.hidden=false;t.focus()}save()};\n b.querySelector(\'.fb-cm\').onclick=()=>{const t=b.querySelector(\'.fb-text\');t.hidden=!t.hidden;if(!t.hidden)t.focus()};\n b.querySelector(\'.fb-text\').oninput=ev=>{item(b).comment=ev.target.value;b.querySelector(\'.fb-cm\').classList.toggle(\'on\',!!ev.target.value);save()}});\nconst g=document.getElementById(\'fbGeneral\');g.value=st.general||\'\';g.oninput=()=>{st.general=g.value;save()};\nconst used=()=>Object.entries(st.items).filter(([,i])=>i.vote||(i.comment||\'\').trim());\nfunction summary(){const u=used(),l=u.filter(([,i])=>i.vote===\'like\').length,d=u.filter(([,i])=>i.vote===\'unlike\').length,\n c=u.filter(([,i])=>(i.comment||\'\').trim()).length+((st.general||\'\').trim()?1:0);\n document.getElementById(\'fbSum\').textContent=(l||d||c)?`👍 ${l} · 👎 ${d} · 💬 ${c}`:\'No feedback yet\';\n document.getElementById(\'fbList\').innerHTML=u.length?u.map(([a,i])=>`<li><b>${i.vote===\'like\'?\'👍\':i.vote===\'unlike\'?\'👎\':\'💬\'} ${esc(i.label)}</b>`+\n  `${(i.comment||\'\').trim()?\' — \'+esc(i.comment):\'\'}</li>`).join(\'\'):\'<li class=mut>Nothing yet: use the buttons under each picture or voice.</li>\'}\nconst esc=s=>String(s).replace(/[&<>"]/g,c=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\'}[c]));\nconst payload=()=>JSON.stringify({type:\'my-world-feedback\',version:2,world_id:WID,page:\'world.html\',date:new Date().toISOString(),\n general:(st.general||\'\').trim(),items:used().map(([a,i])=>({asset:a,label:i.label,vote:i.vote||null,comment:(i.comment||\'\').trim(),seen_version:i.v||null,current_version:(document.querySelector(`.fb[data-asset="${a}"]`)||{dataset:{}}).dataset.v||null}))},null,2);\nconst toast=m=>{const t=document.getElementById(\'fbToast\');t.textContent=m;setTimeout(()=>t.textContent=\'\',2500)};\ndocument.getElementById(\'fbOpen\').onclick=()=>{summary();document.getElementById(\'fbdlg\').showModal()};\ndocument.getElementById(\'fbCopy\').onclick=async()=>{const txt=payload();try{await navigator.clipboard.writeText(txt);toast(\'Copied: paste it to the Agent\')}\n catch(e){const ta=document.createElement(\'textarea\');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand(\'copy\');ta.remove();toast(\'Copied\')}};\ndocument.getElementById(\'fbDown\').onclick=()=>{const a=document.createElement(\'a\');a.href=URL.createObjectURL(new Blob([payload()],{type:\'application/json\'}));\n a.download=\'feedback.json\';a.click();URL.revokeObjectURL(a.href)};\ndocument.getElementById(\'fbClear\').onclick=()=>{if(confirm(\'Clear all your likes and comments on this page?\')){st={items:{},general:\'\'};g.value=\'\';\n bars.forEach(b=>{const t=b.querySelector(\'.fb-text\');t.value=\'\';t.hidden=true;paint(b)});save()}};\ndocument.getElementById(\'fbdlg\').addEventListener(\'click\',ev=>{if(ev.target.id===\'fbdlg\')ev.target.close()});summary()})();\n</script>'
 
 
 class Overview:
@@ -35,12 +39,44 @@ class Overview:
     def exists(self, rel):
         return (self.w.root / rel).is_file()
 
+    def ver(self, rel):
+        """Short content hash of an asset: changes whenever it is redrawn (cache-busting and feedback versions)."""
+        f = self.w.root / rel
+        return hashlib.sha1(f.read_bytes()).hexdigest()[:10] if f.is_file() else ""
+
+    def src(self, rel):
+        """URL of an asset with its version, so a browser or CDN never shows an old copy after a redraw."""
+        v = self.ver(rel)
+        return f"{rel}?v={v}" if v else rel
+
+    def approved_now(self):
+        """{asset path: date} of the user's approvals that still hold (the asset has not changed since)."""
+        out = {}
+        for rel, day in self.w.cfg.get("approved", {}).items():
+            f = self.w.root / rel
+            if f.is_file() and datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d") <= day:
+                out[rel] = day
+        return out
+
+    def fb(self, rel, label):
+        """Like / Unlike / Comment bar for one asset; the page script keeps the choice in the browser."""
+        if not rel or not self.exists(rel):
+            return ""
+        day = self._approved.get(rel, "")
+        return (f"<div class=fb data-asset='{e(rel)}' data-label='{e(label)}' data-approved='{e(day)}' data-v='{self.ver(rel)}'>"
+                "<button type=button class=fb-like title='Like: approve this design'>👍 Like</button>"
+                "<button type=button class=fb-unlike title='Unlike: needs changes (say what in a comment)'>👎 Unlike</button>"
+                "<button type=button class=fb-cm>💬 Comment</button>"
+                + (f"<span class=fb-ok>Approved {e(day)}</span>" if day else "")
+                + "<span class=fb-old hidden>Redrawn since your feedback: please look again</span>"
+                + f"<textarea class=fb-text rows=2 hidden placeholder='What should change in {e(label)}?'></textarea></div>")
+
     def img(self, rel, alt, cls=""):
         if not rel or not self.exists(rel):
             return f"<div class='ph {cls}'>No picture yet</div>"
-        return f"<a href='{e(rel)}' target=_blank><img class='{cls}' src='{e(rel)}' alt='{e(alt)}' loading=lazy></a>"
+        return f"<a href='{e(self.src(rel))}' target=_blank><img class='{cls}' src='{e(self.src(rel))}' alt='{e(alt)}' loading=lazy></a>"
 
-    def location_notes(self):
+    def scene_notes(self):
         """From Setting.md headings `#### Title (`key`)`: key → (title, summary, layout_only)."""
         out = {}
         for m in re.finditer(r"^#{3,4}\s+(.+?)\s*\((`[^)]*`)\)\s*\n(.*?)(?=^#{2,4}\s|\Z)", self.setting, re.S | re.M):
@@ -87,6 +123,7 @@ class Overview:
 
     def build(self):
         w, cfg = self.w, self.w.cfg
+        self._approved = self.approved_now()
         vdir = w.root / "_reference" / "voices"
         meta = json.loads((vdir / "voices_meta.json").read_text(encoding="utf-8")) if (vdir / "voices_meta.json").is_file() else {}
         samples = json.loads((vdir / "samples.json").read_text(encoding="utf-8")) if (vdir / "samples.json").is_file() else {}
@@ -99,21 +136,22 @@ class Overview:
             quote = samples.get("samples", {}).get(k)
             vhtml = ""
             if voice or self.exists(clip):
-                vhtml = ("<h4>Voice</h4>" + (f"<audio controls preload=none src='{clip}'></audio>" if self.exists(clip) else
-                                             "<p class=mut>No voice clip yet</p>")
+                vhtml = ("<h4>Voice</h4>" + (f"<audio controls preload=none src='{e(self.src(clip))}'></audio>" if self.exists(clip) else
+                                             "<p class=mut>No voice clip yet</p>") + self.fb(clip, c["name"] + " voice")
                          + (f"<p class=mut>{e(voice)}</p>" if voice else "")
                          + (f"<p class=quote>“{e(quote)}”</p>" if quote else "")
                          + (f"<p class=mut>{e(c.get('voice_src', ''))}{f' · {dur}s' if dur else ''}</p>" if c.get('voice_src') or dur else ""))
             tag = " · ".join(filter(None, (c.get("label"), c.get("tag"))))
             sheet_rel = wl.rel(w.sheet(k), w.root)
             chars += (f"<article class=card style='--accent:{e(c.get('colour', '#888'))}'>{self.img(sheet_rel, c['name'] + ' sheet', 'sheet')}"
-                      f"<div class=pad><h3>{e(c['name'])} <small>{e(tag)}</small></h3>"
+                      f"<div class=pad><h3>{e(c['name'])} <small>{e(tag)}</small></h3>{self.fb(sheet_rel, c['name'] + ' sheet')}"
                       f"<ul>{''.join(f'<li>{e(f)}</li>' for f in c.get('facts', []))}</ul>{vhtml}</div></article>")
 
         groups = [(g["path"], g.get("caption", "")) for g in cfg.get("groups", [])]
         if w.height_chart() and not any(Path(p).name == w.height_chart().name for p, _ in groups):
             groups.append((wl.rel(w.height_chart(), w.root), "Height chart: true relative sizes"))
-        groups_html = "".join(f"<figure class=card>{self.img(p, cap)}<figcaption class=pad>{e(cap)}</figcaption></figure>"
+        groups_html = "".join(f"<figure class=card>{self.img(p, cap)}<figcaption class=pad>{e(cap)}"
+                              f"{self.fb(p, Path(p).stem.replace('_', ' ') + ' (group picture)')}</figcaption></figure>"
                               for p, cap in groups)
 
         dialogue = ""
@@ -123,29 +161,30 @@ class Overview:
             turns = "".join(f"<li><b>{e(w.char_name(t['speaker']))}:</b> {e(t['text'])}</li>" for t in samples["turns"])
             dialogue = (f"<section id=voices><h2>Voices</h2><p class=lead>{e(cfg.get('voices_lead', 'The characters talking together.'))}</p>"
                         f"<article class='card pad'><h3>{e(samples.get('title', 'Sample scene'))}</h3>"
-                        + (f"<audio controls preload=none src='{src}'></audio>" if src else "")
+                        + (f"<audio controls preload=none src='{e(self.src(src))}'></audio>" if src else "")
+                        + self.fb(f"_reference/voices/{dn}.wav", "Sample dialogue")
                         + f"<ol class=turns>{turns}</ol><p class=mut>All clips on <a href='_reference/voices/voices.html'>voices.html</a>.</p></article></section>")
 
         world_cards = "".join(f"<div><h3>{e(c['title'])}</h3><p>{e(c['text'])}</p></div>" for c in cfg.get("world_cards", []))
         if not world_cards and "world" in w.blocks():
             world_cards = f"<div><h3>The world</h3><p>{e(w.get('world'))}</p></div>"
 
-        notes = self.location_notes()
+        notes = self.scene_notes()
         locs = ""
-        for k in w.locations():
-            title, summary, layout_only = notes.get(k, (k.replace("_", " ").capitalize(), w.get("location:" + k), False))
-            pic = wl.rel(w.location_image(k), w.root)
+        for k in w.scenes():
+            title, summary, layout_only = notes.get(k, (k.replace("_", " ").capitalize(), w.get("scene:" + k), False))
+            pic = wl.rel(w.scene_image(k), w.root)
             badge = ("<span class='badge warn'>Older render, layout only</span>" if layout_only else
                      "" if self.exists(pic) else "<span class=badge>Picture needed</span>")
-            locs += (f"<article class=card>{self.img(pic, title)}<div class=pad><h3>{e(title)}</h3>"
+            locs += (f"<article class=card>{self.img(pic, title)}<div class=pad><h3>{e(title)}</h3>{self.fb(pic, title + ' (set)')}"
                      f"<p><code>{e(k)}</code> {badge}</p><p>{e(summary[:320])}</p></div></article>")
 
         prop_cards = "".join(f"<figure class=card>{self.img(pic, name)}<figcaption class=pad><b>{e(name)}</b>"
-                             f"{f' · {e(desc)}' if desc else ''}</figcaption></figure>"
-                             for name, desc, pic in self.props() if pic)
-        props_html = (f"<section id=props><h2>Props</h2><p class=lead>Designed props look the same every time they "
-                      f"appear. The full list is in <a href=Setting.md>Setting.md</a>.</p><div class=grid>{prop_cards}</div></section>"
-                      if prop_cards else "")
+                             f"{f' · {e(desc)}' if desc else ''}{self.fb(pic, name + ' (prop)')}</figcaption></figure>"
+                             for name, desc, pic in self.props())
+        props_html = (f"<section id=props><h2>Props</h2><p class=lead>Characters, scenes and props are the three "
+                      f"factors of the world: each prop looks the same every time it appears. The full list is in "
+                      f"<a href=Setting.md>Setting.md</a>.</p><div class=grid>{prop_cards or '<p class=mut>No props yet.</p>'}</div></section>")
 
         diagram = cfg.get("workflow_diagram")
         steps = (f"<a href='{e(diagram)}' target=_blank><img class=diagram src='{e(diagram)}' alt='Workflow diagram'></a>"
@@ -251,8 +290,9 @@ class Overview:
                          "document.getElementById(b.dataset.go).scrollIntoView({block:'start'})}));"
                          "document.getElementById('scoredlg').addEventListener('click',ev=>{if(ev.target.id==='scoredlg')"
                          "ev.target.close()})</script></section>")
+        feedback_html = FEEDBACK_HTML.replace("__WID__", json.dumps(wl.world_id(w)))
         nav = [("characters", "Characters")] + ([("voices", "Voices")] if dialogue else []) + \
-              [("world", "World"), ("locations", "Locations")] + ([("props", "Props")] if props_html else []) + \
+              [("world", "World"), ("scenes", "Scenes"), ("props", "Props")] + \
               [("workflow", "Workflow")] + ([("evaluation", "Evaluation")] if eval_html else []) + ([("usage", "Usage")] if usage_html else []) +               [("docs", "Docs"), ("tasks", "Tasks")]
 
         page = f"""<!doctype html><html lang=en><head><meta charset=utf-8>
@@ -301,6 +341,12 @@ dialog#scoredlg::backdrop{{background:rgba(0,0,0,.45)}} .dlghead{{display:flex;j
 .evt tr.r-bad td:first-child{{box-shadow:inset 3px 0 var(--bad)}} .evt tr.r-bad{{background:color-mix(in srgb,var(--bad) 7%,transparent)}}
 .evals .c-ok{{border-top:4px solid var(--ok)}} .evals .c-warn{{border-top:4px solid var(--warn)}} .evals .c-bad{{border-top:4px solid var(--bad)}}
 .evals .c-bad b{{color:var(--bad)}} .evals .st{{color:#fff}} .legend{{margin:12px 0 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--mut)}}
+.fb{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}} .fb button,.fbbar button,.fbbtns button{{font:inherit;font-size:13px;padding:4px 10px;border-radius:16px;border:1px solid var(--line);background:var(--card);color:inherit;cursor:pointer}}
+.fb .fb-like.on{{background:var(--ok);border-color:var(--ok);color:#fff}} .fb .fb-unlike.on{{background:var(--bad);border-color:var(--bad);color:#fff}} .fb .fb-cm.on{{border-color:var(--brand);color:var(--brand)}}
+.fb-ok{{font-size:12px;color:var(--ok);font-weight:600}} .fb-old{{font-size:12px;color:var(--warn,#b7791f);font-weight:600}} .fb-text,#fbGeneral{{width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit}}
+.fbbar{{position:fixed;right:16px;bottom:16px;z-index:10;display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:24px;padding:6px 6px 6px 14px;box-shadow:0 4px 16px rgba(0,0,0,.15);font-size:14px}}
+.fbbar #fbOpen{{background:var(--brand);border-color:var(--brand);color:#fff}} dialog#fbdlg{{width:min(640px,calc(100vw - 32px));max-height:85vh;padding:0;border:1px solid var(--line);border-radius:14px;background:var(--card);color:inherit}}
+dialog#fbdlg::backdrop{{background:rgba(0,0,0,.45)}} #fbList{{padding-left:18px}} #fbList li{{margin:4px 0}} .fbbtns #fbCopy{{background:var(--brand);border-color:var(--brand);color:#fff}} main{{padding-bottom:72px}}
 .x{{font-size:22px;line-height:1;background:none;border:0;color:inherit;cursor:pointer}} .warn{{color:var(--warn)}}
 .bar{{display:inline-block;width:60px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--brand) var(--v),var(--line) var(--v))}}
 </style></head><body><main>
@@ -313,7 +359,7 @@ Every render uses these sheets as references.</p><div class='grid three'>{chars}
 {dialogue}
 <section id=world><h2>The world</h2><p class=lead>From <a href=Setting.md>Setting.md</a>.</p><div class=world>{world_cards}</div></section>
 
-<section id=locations><h2>Locations</h2><p class=lead>Each location has a key that story files name (<code>"location": "{e((w.locations() or ['key'])[0])}"</code>).</p><div class=grid>{locs}</div></section>
+<section id=scenes><h2>Scenes</h2><p class=lead>Each scene has a key that story files name (<code>"scene": "{e((w.scenes() or ['key'])[0])}"</code>).</p><div class=grid>{locs}</div></section>
 {props_html}
 <section id=workflow><h2>How stories are made</h2><p class=lead>With the <b>world-stories</b> skill. You approve at every gate; videos are only rendered after approval.</p>{steps}</section>
 
@@ -323,7 +369,7 @@ Every render uses these sheets as references.</p><div class='grid three'>{chars}
 
 <section id=tasks><h2>Tasks</h2><p class=lead>One folder per topic in <code>_tasks/</code>, newest first. On each page, <b>Copy feedback</b> and paste it to the Agent.</p>{task_list}</section>
 <footer>Generated {date.today()} by the my-world skill (<code>build_overview.py</code>). Re-run it after changing the canon, the assets or the tasks.</footer>
-</main></body></html>"""
+</main>{feedback_html}</body></html>"""
         w.overview.write_text(page, encoding="utf-8")
         print(w.overview)
         for p in pagenav.stamp_all(w):

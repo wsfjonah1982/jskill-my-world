@@ -2,7 +2,7 @@
 
 Usage:  python new_world.py [--name "World name"] [--input [DIR]] [--world DIR]    (name defaults to "My World")
 There is only one world: _world/ is the world folder itself (--world DIR overrides it, for tests).
-If _world/ already holds a world.json this refuses: a new cast, character, location or prop is merged into the
+If _world/ already holds a world.json this refuses: a new cast, character, scene or prop is merged into the
 existing world (add sections to its Identities.md / Setting.md and entries to world.json), never made a second world.
 --input DIR copies the user's raw material into _reference/input/, where it stays as the source record (the raw folder
 may be archived later, so the world never points at it). Its name depends on the environment (_input, upload, mnt,
@@ -19,7 +19,7 @@ from pathlib import Path
 SKILL_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES = SKILL_DIR / "templates"
 WORLD_HOME = SKILL_DIR / "_world"
-FOLDERS = ["_asset/settings", "_asset/props", "_asset/voices", "_reference/characters/refs", "_reference/settings/refs",
+FOLDERS = ["_asset/scenes", "_asset/props", "_asset/voices", "_reference/characters/refs", "_reference/scenes/refs",
            "_reference/props/refs", "_reference/voices/refs", "_reference/groups", "_reference/archive", "_tasks"]
 
 
@@ -51,7 +51,7 @@ if __name__ == "__main__":
         sys.exit(__doc__)
     root = Path(target or WORLD_HOME).resolve()
     if (root / "world.json").exists():
-        sys.exit(f"{root} already holds a world. Only one world exists: merge the new characters, locations and "
+        sys.exit(f"{root} already holds a world. Only one world exists: merge the new characters, scenes and "
                  "props into its Identities.md, Setting.md and world.json instead.")
     root.mkdir(parents=True, exist_ok=True)
     for f in FOLDERS:

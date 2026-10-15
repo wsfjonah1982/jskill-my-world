@@ -1,7 +1,7 @@
 # Setting — {{NAME}}
 
-The canonical world, locations and props. **Every image or video generated for this world must take its environment
-from this file** (and its characters from [`Identities.md`](Identities.md)). New locations are added here first,
+The canonical world, scenes and props. **Every image or video generated for this world must take its environment
+from this file** (and its characters from [`Identities.md`](Identities.md)). New scenes are added here first,
 then used in a story.
 
 Blocks marked `<!-- prompt:... -->` are pasted word for word into prompts.
@@ -24,17 +24,17 @@ Blocks marked `<!-- prompt:... -->` are pasted word for word into prompts.
 REPLACE: one paragraph: the place, its palette and light, what it never has (e.g. no readable text, logos or brand packaging).
 ```
 
-## Locations
+## Scenes
 
-Each location has a reference picture (`_asset/settings/<key>.png`, my-world `world_images.py set <key>`) and a
-prompt block. Put a real photo at `_reference/settings/refs/<key>_photo.jpg` to fix the layout.
+Each scene has a reference picture (`_asset/scenes/<key>.png`, my-world `world_images.py scene <key>`) and a
+prompt block. Put a real photo at `_reference/scenes/refs/<key>_photo.jpg` to fix the layout.
 Keep the heading form `#### Title (`key`)`: the overview page reads it.
 
 #### REPLACE Home base (`home`)
-Reference: `_asset/settings/home.png`.
+Reference: `_asset/scenes/home.png`.
 - Layout, furniture, colours, where the characters usually are.
 
-<!-- prompt:location:home -->
+<!-- prompt:scene:home -->
 ```text
 REPLACE: the place as one paragraph: room shape, walls, floor, furniture with colours and materials, windows, light.
 ```

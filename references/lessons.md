@@ -14,7 +14,7 @@
 - **Never name a character in the `world` block:** it goes into every set prompt, and "so the blue cat stays
   blue" drew a cat into empty sets. Say "no people, no animals" there; keep colour rules about characters in prose.
 - **No text anywhere:** models write signs, numbers and logos unless told not to; "no readable text" belongs in the
-  `world` block, the location blocks and the negative lines.
+  `world` block, the scene blocks and the negative lines.
 - **Props:** pasting the full recurring-props list into every prompt makes the model draw all of them. Paste it only
   when a frame names props; otherwise use `no_props_rule`.
 - **A reference sheet beats the text:** a sheet drawn with a reference picture copies it, age and all. If the
@@ -34,11 +34,17 @@
 - **A good raw sheet beats a redraw:** the user's own character sheet can be more precise than anything redrawn from
   it (Xiao Li, 2026-10-14). Check it (`worldlib.py inspect` + a look, see SKILL.md) and use it directly when it
   passes; then make the canon text agree with the picture.
-- **Group pictures drift from the set** when the location is one reference among many (the together picture invented
-  a wide room with two sofas when the set was reference 4 of 5). `world_images.py group` now passes the location as
+- **Group pictures drift from the set** when the scene is one reference among many (the together picture invented
+  a wide room with two sofas when the set was reference 4 of 5). `world_images.py group` now passes the scene as
   image 1, the base picture ("keep its camera viewpoint and furniture positions, only add the characters"); also
   place the characters on furniture that is in the set, in the `group:<name>` block.
 - **A small animal near the camera draws too big,** and writing "SMALL" or a size comparison into the scene does not
   fix it (the bus ride: Butter, sitting in the aisle, reached the seated girl's shoulder, twice). Change the pose
   instead: lying down, or further from the camera than the people. Saying "keep the exact camera viewpoint of image
   1, seen from the same distance" also stops the camera moving in closer.
+
+- **Harness, not collar.** "A red harness" alone is often drawn as a collar. Describe the straps (around the chest
+  behind the front legs, across the front of the chest, joined on the back where the leash clips on) and say
+  "nothing around the neck, NOT a collar". Say the leash runs unbroken from the hand to the harness.
+- **Group pictures zoom in.** Adding a held object (a leash) pulls the camera closer and crops legs and feet. Say
+  "WIDE view, same camera position and distance as the scene picture, whole body and feet visible, do not crop".

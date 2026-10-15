@@ -2,11 +2,11 @@
 name: my-world
 description: >
   Build and maintain a "My World": the canon of an animated series (characters, their looks, sizes, personalities
-  and voices; the world, its locations and recurring props; the art style and video format) as one project folder
-  with Identities.md, Setting.md and world.json, the reference pictures (three-view character sheets, empty location
+  and voices; the world, its scenes and recurring props; the art style and video format) as one project folder
+  with Identities.md, Setting.md and world.json, the reference pictures (three-view character sheets, empty scene
   sets, prop pictures, group pictures, a height chart), designed character voices, and world.html, the
   summary page every story links back to. Use whenever the user wants to create a new world / series / cast / set of
-  characters for videos, add or change a character, location, prop or voice in an existing world, redraw a sheet or
+  characters for videos, add or change a character, scene, prop or voice in an existing world, redraw a sheet or
   set, or rebuild the overview page. Stories made in the world (topic → keyframes → videos) use the companion skill
   world-stories.
 ---
@@ -22,10 +22,10 @@ my-world/               (this skill)
   _world/               the world (git-ignored):
     world.json            manifest: name, tagline, format (ratio, sizes, durations, audio), characters, group pictures
     Identities.md         canon: style, each character (look, size, personality, voice), the cast together, audio rule
-    Setting.md            canon: the world, its look, locations, recurring props, rules
+    Setting.md            canon: the world, its look, scenes, recurring props, rules
     world.md              status, lessons learned, session log, pending tasks
-    world.html            the "My World" page (build_overview.py): characters, voices, world, locations, props, tasks
-    _asset/               only what generation uses: <char>.png sheets, settings/<loc>.png, props/<prop>.png,
+    world.html            the "My World" page (build_overview.py): characters, voices, world, scenes, props, tasks
+    _asset/               only what generation uses: <char>.png sheets, scenes/<key>.png, props/<prop>.png,
                           voices/<char>.wav, group pictures, height_chart.png
     _reference/           prompts, logs, source photos (*/refs/), input/ (copy of the raw input), voice samples, archive/
     _tasks/               stories (world-stories skill), one folder per topic
@@ -55,13 +55,13 @@ height chart. If it fails, use it as a reference for a redraw instead and tell t
 
 **One world only.** Never create a second world or a sub-folder per world. When `_world/world.json` exists and the
 user asks for a "new world", a new cast or new characters, places or props, **merge them into the existing world**
-(see Changing an existing world): new character and location sections in the canon, entries in world.json, then draw
+(see Changing an existing world): new character and scene sections in the canon, entries in world.json, then draw
 what is new. If the new material conflicts with the canon (another art style, format or setting), ask the user which
 wins before changing it. `new_world.py` refuses to run over an existing world.
 
 **The canon contract.** In `Identities.md` and `Setting.md`, a `<!-- prompt:<key> -->` marker followed by a fenced
 block is pasted word for word into prompts. Required: `style`, `characters`, `video-defs`, `video-rules`, `audio`,
-`world`, `location:<key>` (one or more), and `voice` when the format has audio. Per character: `sheet:<char>` (sheet
+`world`, `scene:<key>` (one or more), and `voice` when the format has audio. Per character: `sheet:<char>` (sheet
 design brief) and `voice:<char>` (voice design). Optional: `props`, `prop:<key>`, `group:<name>`. Full description of
 every block and of world.json: `references/world_format.md`. Read it before writing the canon.
 
@@ -71,12 +71,13 @@ Scripts are in `scripts/` (run with `python <skill>/scripts/<name>.py …`; they
 |---|---|
 | `new_world.py [--name "…"] [--input [DIR]]` | skeleton from `templates/` in `_world/`, plus a copy of the raw input; refuses if a world exists |
 | `worldlib.py check [groups]` | dependencies + canon completeness (`world` group lists every REPLACE left); `canon [key]`; `info`; `inputs` (raw input folders); `inspect <img>` (fit to use as an asset?) |
-| `world_images.py sheet\|set\|prop\|group\|height …` | draws the reference pictures from the canon (`--dry-run` = prompts only) |
+| `world_images.py sheet\|scene\|prop\|group\|height …` | draws the reference pictures from the canon (`--dry-run` = prompts only) |
 | `voices.py [script.json] design\|dialogue\|page\|all` | character voices (Seed Audio) → `_asset/voices/` |
 | `build_overview.py` | `world.html` + nav bars on every page |
 | `publish_world.py [--dry-run] [--slug S] [--overwrite]` | uploads `world.html` and only the files it links (never raw input, logs, archive) to TOS, public-read, under a path unique to this world (`<name>-<world_id>`, e.g. `world/my-world-3f9a1c2b/`); refuses to overwrite another world's upload; prints the URL |
 | `evaluate_world.py [template]` | checklist, quality, breadth and approvals → `world.md` Evaluation section + `world.html` (rebuilt) |
 | `llm_usage.py [report\|sync\|backfill]` | token and call ledger of every model call (generation + the agent) → `_reference/log/usage.json`, Usage section of `world.html` |
+| `feedback.py apply <file\|->` | applies the user's 👍 / 👎 / 💬 feedback from `world.html` → approvals in world.json + `_reference/feedback/todo.md` |
 
 Generation needs no other skill: `scripts/ark/` holds the Seedream (images) and Seedance (videos) scripts, the
 skill's `aigc_config.json` (the AIGC model config) the endpoints, default model ids and generation settings (`image_model_id`, `video_model_id`,
@@ -113,7 +114,7 @@ ask them to put it in the file (or the env var of the same name) themselves.
   if `worldlib.py inputs` finds none or several.
 - **The cast:** each character's name, species and age, looks (hair/fur, eyes, clothes, colours), personality, how
   they talk, and **real sizes as numbers** (height in cm; shoulder height for animals).
-- **The world:** place and era, the home base, and the other locations: **at least 9 in all** (full marks at 30).
+- **The world:** place and era, the home base, and the other scenes: **at least 9 in all** (full marks at 30).
 - **The cast size:** **at least 3 characters** (full marks at 8).
 - **The art style** (e.g. 3D Pixar-like cartoon).
 - **The format:** aspect ratio, short-clip and long-take lengths, audio or not (music, or conversation only).
@@ -121,11 +122,11 @@ ask them to put it in the file (or the env var of the same name) themselves.
 
 **Recommended (strongly; they anchor the results far better than text):**
 - **Character sheets or photos** (front, side, back): a good sheet is used directly once it passes the raw-picture checks.
-- **One picture per location:** it fixes the layout of the set.
+- **One picture per scene:** it fixes the layout of the set.
 - **Prop photos** for recurring objects.
 - **Voice recordings, 30 s or less per character:** voices are cloned from them; otherwise they are designed from text.
 
-**Decided along the way, with the user:** approve the character sheets, then the location sets, then the group
+**Decided along the way, with the user:** approve the character sheets, then the scene sets, then the group
 pictures and height chart, then the voices.
 
 ## Building the world (only when `_world/` has no world.json)
@@ -134,8 +135,8 @@ pictures and height chart, then the voices.
    item, and ask once for the recommended pictures and recordings.
 2. **Skeleton:** `new_world.py --input [DIR]` (the world is called "My World"; keep `name`, the tagline and the file
    headings general, without character names, since more casts may be merged in). Put the user's photos in `_reference/characters/refs/<char>*.jpg`,
-   `_reference/settings/refs/<loc>_photo.jpg`, `_reference/props/refs/<prop>*.jpg`, voices in `_reference/voices/refs/`.
-3. **Write the canon:** fill `world.json`, `Identities.md`, `Setting.md` (one section per character and per location;
+   `_reference/scenes/refs/<loc>_photo.jpg`, `_reference/props/refs/<prop>*.jpg`, voices in `_reference/voices/refs/`.
+3. **Write the canon:** fill `world.json`, `Identities.md`, `Setting.md` (one section per character and per scene;
    keep the `#### Title (`key`)` heading form). Replace every `REPLACE`. Prompt blocks are short, concrete, positive
    descriptions; put the style line first; state sizes as numbers and ratios; name the details models drift on
    (eye size, ear shape, colour on warm backgrounds…) in every block that needs them. `worldlib.py check world`
@@ -143,12 +144,13 @@ pictures and height chart, then the voices.
 4. **Character sheets:** `world_images.py sheet` (all, or named). Show each sheet to the user (Read the image) and
    ask for approval. Redraw from a changed `sheet:<char>` block, never by editing the picture: edits keep old details.
    The sheets are the identity reference for every later render, so do not move on until they are approved.
-5. **Locations and props:** `world_images.py set` (all or named; the first one sets the style for the rest, so draw
-   the home base first and, once approved, list it in world.json `style_refs`). Props only when recurring:
-   `world_images.py prop <key>`. Show and approve.
+5. **Scenes and props:** `world_images.py scene` (all or named; the first one sets the style for the rest, so draw
+   the home base first and, once approved, list it in world.json `style_refs`). **Props** are the third factor
+   of a world, next to characters and scenes: give every recurring object (at least 3) a `prop:<key>` block and a
+   picture, `world_images.py prop` (all, or named). Show and approve.
 6. **Group pictures:** `world_images.py height` (from `height_cm` in world.json; check the scale, models draw small
-   characters too big) and **one group scene per location** (`group <name> --location <key>` with a
-   `group:<name>` block or `--scene "…"`). Add each to world.json `groups` with its `location` key.
+   characters too big) and **one group scene per scene** (`group <name> --scene <key>` with a
+   `group:<name>` block or `--action "…"`). Add each to world.json `groups` with its `scene` key.
 7. **Voices** (if the format has audio): write `_reference/voices/samples.json` (one sample line per character in
    their own voice, plus a short `turns` dialogue), `voices.py design`, then `voices.py dialogue` and `voices.py page`.
    The user listens on `_reference/voices/voices.html` and approves; delete a clip to redesign it.
@@ -161,8 +163,8 @@ the user asking; an old version is archived automatically when one is redrawn.
 ## Changing an existing world (also: adding a "new" cast or world to it)
 
 - Change the canon first (the block and the prose around it), then redraw what depends on it (sheet, set, prop),
-  then `evaluate_world.py` (which rebuilds `world.html`). A new location = a new `#### Title (`key`)` section with its `location:<key>` block +
-  `world_images.py set <key>`. Never patch a description inside one story's prompt.
+  then `evaluate_world.py` (which rebuilds `world.html`). A new scene = a new `#### Title (`key`)` section with its `scene:<key>` block +
+  `world_images.py scene <key>`. Never patch a description inside one story's prompt.
 - Decisions the user makes ("keep the pictures as they are", "no music") go into the canon and world.md right away.
 
 ## Evaluating the world (after every build or change)
@@ -170,8 +172,9 @@ the user asking; an old version is archived automatically when one is redrawn.
 Every time the world changes (canon, a sheet, set, prop, group picture or voice), finish with an evaluation and
 give the user its result in a few lines: the overall score, the band, and the top issues.
 
-1. **Record approvals first.** When the user approves an asset ("ok", "looks good", "use this one"), add it to
-   world.json `approved` with today's date. Never mark something approved that the user did not approve.
+1. **Record approvals first.** When the user approves an asset ("ok", "looks good", "use this one"), or likes it
+   on `world.html` (see "Feedback from world.html"), add it to world.json `approved` with today's date. Never mark
+   something approved that the user did not approve.
 2. **Look and listen before scoring.** View every picture that changed, and the ones it should match (sheets ↔
    group pictures ↔ height chart, set ↔ group scene); a contact sheet of all assets is the quickest way. Read the
    voice transcripts in `voices_meta.json`.
@@ -188,18 +191,45 @@ override it with its own `scoring.json`), the method, formulas and colour coding
 in `references/scoring.md`. **Every new project uses the default template as it is**; write a world's own `scoring.json` only when the
 user asks to customize the scoring. Change the template, not the code; copy both to reuse the scoring in another project.
 
-**Breadth** rewards a richer world, in three parts:
-- **Characters** with a sheet (weight 40): **minimum 3**, full marks at **8**; part = n / 8.
-- **Locations** with a set (weight 35): **minimum 9**, full marks at **30**; part = n / 30.
-- **Group pictures** (weight 25): **one per location**; part = locations with a group picture (world.json `groups[]`
-  `location`) / locations. The height chart does not count.
-Below a minimum, or a location without a group picture, is also a missing completeness item. When the user wants a
-higher score, suggest what would add the most: a group scene for an uncovered location, a character, a location.
+**Breadth** rewards a richer world. Characters, scenes and props are the three factors of a world, plus the
+group pictures that bring them together:
+- **Characters** with a sheet (weight 30): **minimum 3**, full marks at **8**; part = n / 8.
+- **Scenes** with a set (weight 30): **minimum 9**, full marks at **30**; part = n / 30.
+- **Props** with a picture (weight 20): **minimum 3**, full marks at **15**; part = n / 15.
+- **Group pictures** (weight 20): **one per scene**; part = scenes with a group picture (world.json `groups[]`
+  `scene`) / scenes. The height chart does not count.
+Below a minimum, or a scene without a group picture, is also a missing completeness item. When the user wants a
+higher score, suggest what would add the most: a group picture for an uncovered scene, a prop, a character, a scene.
 
 The result: overall = 50% quality + 50% breadth (only once every quality criterion is scored); bands 90+ excellent,
 75+ good, 60+ fair, below 60 not ready. Completeness is a checklist, not scored: **any missing checklist item or
 unapproved asset means "not ready for stories"**, whatever the score.
 A review older than the last change is flagged stale: re-review before reporting.
+
+## Feedback from world.html
+
+Every design on `world.html` (character sheets, voices, the sample dialogue, sets, group pictures, the height chart,
+props) has **👍 Like**, **👎 Unlike** and **💬 Comment**, plus a general comment box in the **Feedback** panel
+(bottom right). The page keeps the choices in the user's browser; the user clicks **Copy feedback** and pastes the
+JSON to the agent (`"type": "my-world-feedback"`), or gives the downloaded `feedback.json`.
+
+When feedback arrives:
+1. Save the pasted text to a file (or use the given file) and run `feedback.py apply <file>` (`-` reads stdin). It
+   refuses feedback for another world, keeps a copy in `_reference/feedback/`, and:
+   - **👍 Like = approval:** the asset goes into world.json `approved` with today's date.
+   - **👎 Unlike** withdraws the approval and puts the asset on the to-do list with the comment.
+   - **Comments**, with or without a vote, and the general comment go on the to-do list
+     (`_reference/feedback/todo.md`), each with the canon block that drives the asset (`group:park_walk`…).
+   - **Versions:** every asset URL carries its content hash (`?v=`), so nobody sees a cached old copy, and the
+     feedback says which version the user saw (`seen_version`). Feedback on a version redrawn since is not applied:
+     it is listed as ⏳ "older version". Look at the new version; if it already answers the comment, say so,
+     otherwise ask the user to look again. The page also marks such items "Redrawn since your feedback".
+   - **Rule or one-off:** decide whether a comment is a rule for the whole world (e.g. "the dog needs a leash
+     outdoors" → shared canon blocks + world rules, redraw everything it affects) or about this asset only.
+2. Work through the list: change the canon block and the prose around it first, then redraw from it (never edit
+   the picture), and show the user the new version. An unlike without a comment means asking the user what to change.
+3. Run `evaluate_world.py` and `publish_world.py`. Approved designs show as liked, with an "Approved <date>" badge,
+   until they change.
 
 ## Model usage: every LLM call is logged
 

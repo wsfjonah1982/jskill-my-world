@@ -1,35 +1,116 @@
 {
   "_about": "Scoring template: the rubric and calculation rules evaluate_world.py uses. Copy it to another project and change the values, not the code. A world can override it with its own scoring.json at the world root. The method is described in references/scoring.md.",
-  "weights": {"quality": 0.5, "breadth": 0.5},
+  "weights": {
+    "quality": 0.5,
+    "breadth": 0.5
+  },
   "bands": [
-    [90, "excellent: ready for stories"],
-    [75, "good: usable, fix the listed issues"],
-    [60, "fair: fix the issues before making stories"],
-    [0, "not ready"]
+    [
+      90,
+      "excellent: ready for stories"
+    ],
+    [
+      75,
+      "good: usable, fix the listed issues"
+    ],
+    [
+      60,
+      "fair: fix the issues before making stories"
+    ],
+    [
+      0,
+      "not ready"
+    ]
   ],
   "status": {
     "_about": "Colour coding. Scores 0-100: pass (green) at or above pass, check (amber) at or above check, else fail (red). Quality criteria 1-5 use criterion. Breadth parts: pass at full marks, check at or above the minimum, fail below it. Checklist areas: pass when every item is done, else fail. Approvals: pass when all are approved, else check.",
-    "score": {"pass": 75, "check": 60},
-    "criterion": {"pass": 4, "check": 3}
+    "score": {
+      "pass": 75,
+      "check": 60
+    },
+    "criterion": {
+      "pass": 4,
+      "check": 3
+    }
   },
   "quality": {
     "_about": "Each criterion is scored 1-5 by the reviewer (1 = fails, 3 = usable with visible flaws, 5 = no flaw found). Quality = sum(weight x (score - 1) / 4) / sum(weight) x 100, only when every criterion is scored.",
     "criteria": [
-      {"id": "identity", "label": "Character identity", "weight": 20, "means_5": "Each character looks the same on its sheet, in every group picture and on the height chart: face, hair or fur, eyes, colours, outfit."},
-      {"id": "canon_match", "label": "Pictures match the canon", "weight": 15, "means_5": "Sheets, sets and props agree with the text of Identities.md and Setting.md (hair, clothes, colours, eye size, furniture); where they differ, the canon was changed to match."},
-      {"id": "scale", "label": "True sizes", "weight": 10, "means_5": "Relative sizes follow height_cm in every picture; the height chart is to scale."},
-      {"id": "set_fidelity", "label": "Group pictures keep the sets", "weight": 15, "means_5": "Group scenes keep their location's camera view, layout and furniture; nothing invented, moved or missing."},
-      {"id": "style", "label": "One art style", "weight": 10, "means_5": "Sheets, sets, props and group pictures share one rendering style and light."},
-      {"id": "clean", "label": "Clean pictures", "weight": 10, "means_5": "No text, logos, watermarks, borders, extra people or animals, or generation artefacts (hands, eyes, melted objects)."},
-      {"id": "voices", "label": "Voices", "weight": 20, "means_5": "Each voice fits its character, follows the language and accent rules, speaks every line correctly (see the transcripts) at the agreed pace; the dialogue sounds like one conversation."}
+      {
+        "id": "identity",
+        "label": "Character identity",
+        "weight": 20,
+        "means_5": "Each character looks the same on its sheet, in every group picture and on the height chart: face, hair or fur, eyes, colours, outfit."
+      },
+      {
+        "id": "canon_match",
+        "label": "Pictures match the canon",
+        "weight": 15,
+        "means_5": "Sheets, sets and props agree with the text of Identities.md and Setting.md (hair, clothes, colours, eye size, furniture); where they differ, the canon was changed to match."
+      },
+      {
+        "id": "scale",
+        "label": "True sizes",
+        "weight": 10,
+        "means_5": "Relative sizes follow height_cm in every picture; the height chart is to scale."
+      },
+      {
+        "id": "set_fidelity",
+        "label": "Group pictures keep the scenes",
+        "weight": 15,
+        "means_5": "Group scenes keep their scene's camera view, layout and furniture; nothing invented, moved or missing."
+      },
+      {
+        "id": "style",
+        "label": "One art style",
+        "weight": 10,
+        "means_5": "Sheets, sets, props and group pictures share one rendering style and light."
+      },
+      {
+        "id": "clean",
+        "label": "Clean pictures",
+        "weight": 10,
+        "means_5": "No text, logos, watermarks, borders, extra people or animals, or generation artefacts (hands, eyes, melted objects)."
+      },
+      {
+        "id": "voices",
+        "label": "Voices",
+        "weight": 20,
+        "means_5": "Each voice fits its character, follows the language and accent rules, speaks every line correctly (see the transcripts) at the agreed pace; the dialogue sounds like one conversation."
+      }
     ]
   },
   "breadth": {
-    "_about": "Part score = min(count, full) / full x 100. Breadth = sum(weight x part score) / sum(weight). A count below its minimum is also a missing checklist item. \"per_location\" means one per location: minimum and full marks are the number of locations.",
+    "_about": "Part score = min(count, full) / full x 100. Breadth = sum(weight x part score) / sum(weight). A count below its minimum is also a missing checklist item. Characters, scenes and props are the three factors of a world. \"per_scene\" means one per scene: minimum and full marks are the number of scenes.",
     "parts": [
-      {"id": "characters", "label": "Characters with a sheet", "weight": 40, "minimum": 3, "full": 8},
-      {"id": "locations", "label": "Locations with a set", "weight": 35, "minimum": 9, "full": 30},
-      {"id": "groups", "label": "Locations with a group picture", "weight": 25, "minimum": "per_location", "full": "per_location"}
+      {
+        "id": "characters",
+        "label": "Characters with a sheet",
+        "weight": 30,
+        "minimum": 3,
+        "full": 8
+      },
+      {
+        "id": "scenes",
+        "label": "Scenes with a set",
+        "weight": 30,
+        "minimum": 9,
+        "full": 30
+      },
+      {
+        "id": "props",
+        "label": "Props with a picture",
+        "weight": 20,
+        "minimum": 3,
+        "full": 15
+      },
+      {
+        "id": "groups",
+        "label": "Scenes with a group picture",
+        "weight": 20,
+        "minimum": "per_scene",
+        "full": "per_scene"
+      }
     ]
   },
   "checklist": {
